@@ -25,9 +25,20 @@
 #include "cpu.h"
 
 
-#define TBBLUE_CORE_VERSION_MAJOR     3
-#define TBBLUE_CORE_VERSION_MINOR     0
-#define TBBLUE_CORE_VERSION_SUBMINOR  0
+#define TBBLUE_CORE_DEFAULT_VERSION_MAJOR     3
+#define TBBLUE_CORE_DEFAULT_VERSION_MINOR     1
+#define TBBLUE_CORE_DEFAULT_VERSION_SUBMINOR  6
+
+//borde izquierdo + pantalla + borde derecho, multiplicado por 2
+#define TBBLUE_LAYERS_PIXEL_WIDTH ((48+256+48)*2)
+
+//De momento esto solo se usa en carga/grabacion snapshots zsf
+#define TBBLUE_TOTAL_RAM_SIZE 2048
+
+#define TBBLUE_FPGA_ROM_SIZE 8
+
+//Los 8kb de rom del final estan repetidos
+#define TBBLUE_TOTAL_MEMORY_USED (TBBLUE_TOTAL_RAM_SIZE+TBBLUE_FPGA_ROM_SIZE*2)
 
 extern z80_byte *tbblue_ram_memory_pages[];
 
@@ -44,6 +55,10 @@ extern int tbblue_use_rtc_traps;
 extern int tbblue_already_autoenabled_rainbow;
 
 extern void tbblue_out_port(z80_int port,z80_byte value);
+
+extern z80_byte tbblue_core_current_version_major;
+extern z80_byte tbblue_core_current_version_minor;
+extern z80_byte tbblue_core_current_version_subminor;
 
 extern void tbblue_set_memory_pages(void);
 
@@ -65,12 +80,16 @@ extern z80_bit tbblue_bootrom;
 
 extern void tbblue_set_timing_48k(void);
 
-//extern void tbblue_set_emulator_setting_timing(void);
+extern int tbblue_get_altrom_offset_dir(int altrom,z80_int dir);
+extern int tbblue_get_altrom(void);
 
-/*
-243B - Set register #
-253B - Set/read value
-*/
+extern void tbblue_set_emulator_setting_timing(void);
+extern void tbblue_set_emulator_setting_reg_8(void);
+extern void tbblue_set_emulator_setting_divmmc(void);
+
+extern void tbblue_set_ram_blocks(int memoria_kb);
+
+extern char *tbblue_get_layer2_mode_name(void);
 
 #define TBBLUE_REGISTER_PORT 0x243b
 #define TBBLUE_VALUE_PORT 0x253b
@@ -123,12 +142,18 @@ extern void tbsprite_do_overlay(void);
 #define TBBLUE_SPRITE_BORDER 32
 #define TBBLUE_TILES_BORDER 32
 
+//Lineas de border superior e inferior ocupados por layer 2 en resoluciones 1 y 2
+#define TBBLUE_LAYER2_12_BORDER 32
+
 #define MAX_X_SPRITE_LINE (TBBLUE_SPRITE_BORDER+256+TBBLUE_SPRITE_BORDER)
 
 
 
 #define TBBLUE_MAX_PATTERNS 64
-#define TBBLUE_SPRITE_SIZE 256
+#define TBBLUE_SPRITE_8BPP_SIZE 256
+#define TBBLUE_SPRITE_4BPP_SIZE 128
+
+#define TBBLUE_SPRITE_ARRAY_PATTERN_SIZE (TBBLUE_MAX_PATTERNS*TBBLUE_SPRITE_8BPP_SIZE)
 
 #define TBBLUE_MAX_SPRITES 128
 //#define TBBLUE_TRANSPARENT_COLOR_INDEX 0xE3
@@ -197,9 +222,10 @@ extern z80_byte return_tbblue_mmu_segment(z80_int dir);
 extern int tbblue_is_writable_segment_mmu_rom_space(z80_int dir);
 
 
-extern z80_byte tbsprite_pattern_get_value_index(z80_byte sprite,z80_byte index_in_sprite);
+extern z80_byte tbsprite_pattern_get_value_index_8bpp(z80_byte sprite,z80_byte index_in_sprite);
+extern z80_byte tbsprite_pattern_get_value_index_4bpp(z80_byte sprite,int offset_1_pattern,z80_byte index_in_sprite);
 
-extern void tbsprite_pattern_put_value_index(z80_byte sprite,z80_byte index_in_sprite,z80_byte value);
+extern void tbsprite_pattern_put_value_index_8bpp(z80_byte sprite,z80_byte index_in_sprite,z80_byte value);
 
 
 #define TBBLUE_CLIP_WINDOW_LAYER2   0
@@ -251,6 +277,7 @@ extern void tbblue_copper_handle_next_opcode(void);
 extern void tbblue_copper_handle_vsync(void);
 
 extern z80_bit tbblue_deny_turbo_rom;
+extern int tbblue_deny_turbo_rom_max_allowed;
 extern void tbblue_set_emulator_setting_turbo(void);
 
 
@@ -295,6 +322,7 @@ extern struct s_tbblue_machine_id_definition tbblue_machine_id_list[];
 extern z80_byte *get_lores_pointer(int y);
 
 extern void tbblue_out_port_32765(z80_byte value);
+extern void tbblue_out_port_8189(z80_byte value);
 
 extern z80_byte tbblue_uartbridge_readdata(void);
 extern void tbblue_uartbridge_writedata(z80_byte value);

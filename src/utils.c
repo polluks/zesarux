@@ -107,6 +107,10 @@
 #include "stats.h"
 #include "scl2trd.h"
 #include "zip.h"
+#include "msx.h"
+#include "coleco.h"
+#include "sg1000.h"
+#include "svi.h"
 
 //Archivo usado para entrada de teclas
 FILE *ptr_input_file_keyboard;
@@ -298,6 +302,99 @@ struct x_tabla_teclado cpc_tabla_teclado_letras[]={
         {&cpc_keyboard_table[8],128}
 };
 
+
+
+struct x_tabla_teclado msx_tabla_teclado_letras[]={
+	{&msx_keyboard_table[2],64}, //A
+	{&msx_keyboard_table[2],128},
+        {&msx_keyboard_table[3],1},
+        {&msx_keyboard_table[3],2}, //D
+        {&msx_keyboard_table[3],4},
+        {&msx_keyboard_table[3],8},
+        {&msx_keyboard_table[3],16},
+        {&msx_keyboard_table[3],32}, //H
+        {&msx_keyboard_table[3],64},
+        {&msx_keyboard_table[3],128},
+        {&msx_keyboard_table[4],1},
+        {&msx_keyboard_table[4],2}, //L
+        {&msx_keyboard_table[4],4},
+        {&msx_keyboard_table[4],8}, //N
+        {&msx_keyboard_table[4],16},
+        {&msx_keyboard_table[4],32}, //P
+        {&msx_keyboard_table[4],64},
+        {&msx_keyboard_table[4],128},
+        {&msx_keyboard_table[5],1},
+        {&msx_keyboard_table[5],2}, //T
+        {&msx_keyboard_table[5],4},
+        {&msx_keyboard_table[5],8},
+        {&msx_keyboard_table[5],16},
+        {&msx_keyboard_table[5],32}, //X
+        {&msx_keyboard_table[5],64},
+        {&msx_keyboard_table[5],128}
+};
+
+
+struct x_tabla_teclado msx_tabla_teclado_numeros[]={
+        {&msx_keyboard_table[0],1}, //0
+        {&msx_keyboard_table[0],2},
+        {&msx_keyboard_table[0],4},
+        {&msx_keyboard_table[0],8},
+        {&msx_keyboard_table[0],16},
+        {&msx_keyboard_table[0],32},     //5
+        {&msx_keyboard_table[0],64},
+        {&msx_keyboard_table[0],128},
+        {&msx_keyboard_table[1],1},
+        {&msx_keyboard_table[1],2}
+
+};
+
+
+
+struct x_tabla_teclado svi_tabla_teclado_letras[]={
+	{&svi_keyboard_table[2],2}, //A
+	{&svi_keyboard_table[2],4},
+        {&svi_keyboard_table[2],8},
+        {&svi_keyboard_table[2],16}, //D
+        {&svi_keyboard_table[2],32},
+        {&svi_keyboard_table[2],64},
+        {&svi_keyboard_table[2],128},
+        {&svi_keyboard_table[3],1}, //H
+        {&svi_keyboard_table[3],2},
+        {&svi_keyboard_table[3],4},
+        {&svi_keyboard_table[3],8},
+        {&svi_keyboard_table[3],16}, //L
+        {&svi_keyboard_table[3],32},
+        {&svi_keyboard_table[3],64}, //N
+        {&svi_keyboard_table[3],128},
+        {&svi_keyboard_table[4],1}, //P
+        {&svi_keyboard_table[4],2},
+        {&svi_keyboard_table[4],4},
+        {&svi_keyboard_table[4],8},
+        {&svi_keyboard_table[4],16}, //T
+        {&svi_keyboard_table[4],32},
+        {&svi_keyboard_table[4],64},
+        {&svi_keyboard_table[4],128},
+        {&svi_keyboard_table[5],1}, //X
+        {&svi_keyboard_table[5],2},
+        {&svi_keyboard_table[5],4}
+};
+
+
+struct x_tabla_teclado svi_tabla_teclado_numeros[]={
+        {&svi_keyboard_table[0],1}, //0
+        {&svi_keyboard_table[0],2},
+        {&svi_keyboard_table[0],4},
+        {&svi_keyboard_table[0],8},
+        {&svi_keyboard_table[0],16},
+        {&svi_keyboard_table[0],32},     //5
+        {&svi_keyboard_table[0],64},
+        {&svi_keyboard_table[0],128},
+        {&svi_keyboard_table[1],1},
+        {&svi_keyboard_table[1],2}
+
+};
+
+
 // ================================== matrix ============================
 //        0      1      2      3      4      5      6      7
 //  +-------------------------------------------------------
@@ -421,7 +518,11 @@ char *array_fabricantes[]={
         "NedoPC",
   "TS Labs",
 	"VTrucco/FB Labs",
-	"Jupiter Cantab"
+	"Jupiter Cantab",
+        "Ascii Corp",
+        "Coleco Industries",
+        "Sega",
+        "Spectravideo Intl"
         
 };
 
@@ -442,14 +543,19 @@ char *array_fabricantes_hotkey[]={
         "N~~edoPC",
         "TS ~~Labs",
         "~~VTrucco/FB Labs",
-        "J~~upiter Cantab"
+        "J~~upiter Cantab",
+        "Ascii C~~orp",
+        "Coleco In~~dustries",
+        "Sega",
+        "Spectravideo Intl"
         
 
 
 };
 
-//Si letra es espacio->no hay letra
-char array_fabricantes_hotkey_letra[]="nsatimbgpcrwzelvu";
+//Si letra es espacio->no hay letra. TODO: Repetida d final sega, porque no hay letras libres
+//Repetida spectravideo final
+char array_fabricantes_hotkey_letra[]="nsatimbgpcrwzelvuoddd";
 
 
 
@@ -473,6 +579,22 @@ int array_maquinas_investronica[]={
 
 int array_maquinas_microdigital_electronica[]={
 	3,4,5,255
+};
+
+int array_maquinas_ascii_corp[]={
+	MACHINE_ID_MSX1,255
+};
+
+int array_maquinas_spectravideo_international[]={
+	MACHINE_ID_SVI_318,MACHINE_ID_SVI_328,255
+};
+
+int array_maquinas_coleco_industries[]={
+	MACHINE_ID_COLECO,255
+};
+
+int array_maquinas_sega[]={
+	MACHINE_ID_SG1000,255
 };
 
 int array_maquinas_amstrad[]={
@@ -546,6 +668,22 @@ int *return_maquinas_fabricante(int fabricante)
 		case FABRICANTE_MICRODIGITAL_ELECTRONICA:
 			return array_maquinas_microdigital_electronica;
 		break;
+
+		case FABRICANTE_ASCII_CORP:
+			return array_maquinas_ascii_corp;
+		break;          
+
+		case FABRICANTE_SPECTRAVIDEO_INTERNATIONAL:
+			return array_maquinas_spectravideo_international;
+		break;                         
+
+		case FABRICANTE_COLECO_INDUSTRIES:
+			return array_maquinas_coleco_industries;
+		break;    
+
+		case FABRICANTE_SEGA:
+			return array_maquinas_sega;
+		break;                  
 
 		case FABRICANTE_AMSTRAD:
 			return array_maquinas_amstrad;
@@ -651,6 +789,23 @@ int return_fabricante_maquina(int maquina)
                 case MACHINE_ID_CPC_4128:
 			return FABRICANTE_AMSTRAD;
 		break;
+
+                case MACHINE_ID_COLECO:
+			return FABRICANTE_COLECO_INDUSTRIES;
+		break;      
+
+                case MACHINE_ID_SG1000:
+			return FABRICANTE_SEGA;
+		break;                                
+
+                case MACHINE_ID_MSX1:
+			return FABRICANTE_ASCII_CORP;
+		break;         
+
+                case MACHINE_ID_SVI_318:
+                case MACHINE_ID_SVI_328:
+			return FABRICANTE_SPECTRAVIDEO_INTERNATIONAL;
+		break;                         
 
 		case 122:
 			return FABRICANTE_JUPITER_CANTAB;
@@ -1204,6 +1359,25 @@ void ascii_to_keyboard_port_set_clear(unsigned tecla,int pressrelease)
 						}
 					}
 
+                                        //mayus para MSX
+					if (MACHINE_IS_MSX) {
+						if (pressrelease) {
+							msx_keyboard_table[6] &=255-1;
+						}
+						else {
+							msx_keyboard_table[6] |=1;
+						}
+					}           
+
+					if (MACHINE_IS_SVI) {
+						if (pressrelease) {
+							svi_keyboard_table[6] &=255-1;
+						}
+						else {
+							svi_keyboard_table[6] |=1;
+						}
+					}                                                                          
+
 					if (MACHINE_IS_CPC) {
 						if (pressrelease) {
 							cpc_keyboard_table[2] &=255-32;
@@ -1229,11 +1403,15 @@ void ascii_to_keyboard_port_set_clear(unsigned tecla,int pressrelease)
 						puerto_32766 &=255-1;
                                         	blink_kbd_a13 &= (255-64);
 						cpc_keyboard_table[5] &= (255-128);
+                                                msx_keyboard_table[8] &= (255-1);
+                                                svi_keyboard_table[8] &= (255-1);
 					}
 	                                else {
 						puerto_32766 |=1;
                                         	blink_kbd_a13 |= 64;
 						cpc_keyboard_table[5] |= 128;
+                                                msx_keyboard_table[8] |= 1;
+                                                svi_keyboard_table[8] |= 1;
 					}
 
         	                break;
@@ -1246,12 +1424,16 @@ void ascii_to_keyboard_port_set_clear(unsigned tecla,int pressrelease)
 						blink_kbd_a8 &= (255-64);
 						//Enter "grande" del cpc
 						cpc_keyboard_table[2] &= (255-4);
+                                                msx_keyboard_table[7] &= (255-128);
+                                                svi_keyboard_table[6] &= (255-64);
 					}
 
                 	                else {
 						puerto_49150 |=1;
 						blink_kbd_a8 |= 64;
 						cpc_keyboard_table[2] |= 4;
+                                                msx_keyboard_table[7] |= 128;
+                                                svi_keyboard_table[6] |= 64;
 					}
 
 
@@ -2802,6 +2984,12 @@ void reset_keyboard_ports(void)
 	int i=0;
 	for (i=0;i<16;i++) cpc_keyboard_table[i]=255;
 
+	//De MSX
+	for (i=0;i<16;i++) msx_keyboard_table[i]=255;        
+
+	//De Spectravideo
+	for (i=0;i<16;i++) svi_keyboard_table[i]=255;           
+
 	//De QL
 	for (i=0;i<8;i++) ql_keyboard_table[i]=255;
 
@@ -3184,6 +3372,8 @@ int util_write_configfile(void)
 
   if (tbblue_deny_turbo_rom.v)                ADD_STRING_CONFIG,"--denyturbotbbluerom");
 
+                                              ADD_STRING_CONFIG,"--tbblue-max-turbo-rom %d",tbblue_deny_turbo_rom_max_allowed);
+
 
   if (tbblue_fast_boot_mode.v)                ADD_STRING_CONFIG,"--tbblue-fast-boot-mode");
 
@@ -3241,6 +3431,12 @@ int util_write_configfile(void)
 
   if (ocr_settings_not_look_23606.v)          ADD_STRING_CONFIG,"--no-ocr-alternatechars");
 
+
+  if (screen_text_all_refresh_pixel.v)        ADD_STRING_CONFIG,"--allpixeltotext");
+                                              
+                                              ADD_STRING_CONFIG,"--allpixeltotext-scale %d",screen_text_all_refresh_pixel_scale);
+
+  if (screen_text_all_refresh_pixel_invert.v) ADD_STRING_CONFIG,"--allpixeltotext-invert");
 
   if (zx8081_vsync_sound.v)                   ADD_STRING_CONFIG,"--zx8081vsyncsound");
   if (ram_in_8192.v)                          ADD_STRING_CONFIG,"--zx8081ram8K2000");
@@ -3385,11 +3581,16 @@ int util_write_configfile(void)
 
   if (zxmmc_emulation.v)                      ADD_STRING_CONFIG,"--enable-zxmmc");
   if (eight_bit_simple_ide_enabled.v)         ADD_STRING_CONFIG,"--enable-8bit-ide");
+
+			                      ADD_STRING_CONFIG,"--diviface-ram-size %d",get_diviface_total_ram());
+
   if (zxpand_enabled.v)                       ADD_STRING_CONFIG,"--enable-zxpand");
   if (zxpand_root_dir[0]!=0)                  ADD_STRING_CONFIG,"--zxpand-root-dir \"%s\"",zxpand_root_dir);
 
   if (esxdos_handler_enabled.v)               ADD_STRING_CONFIG,"--enable-esxdos-handler");
   if (esxdos_handler_root_dir[0]!=0)          ADD_STRING_CONFIG,"--esxdos-root-dir \"%s\"",esxdos_handler_root_dir);
+
+  if (esxdos_handler_enabled.v && esxdos_handler_cwd[0]!=0)  ADD_STRING_CONFIG,"--esxdos-local-dir \"%s\"",esxdos_handler_cwd);
 
   if (ql_microdrive_floppy_emulation)         ADD_STRING_CONFIG,"--enable-ql-mdv-flp");
   if (ql_mdv1_root_dir[0]!=0)                 ADD_STRING_CONFIG,"--ql-mdv1-root-dir \"%s\"",ql_mdv1_root_dir);
@@ -3490,7 +3691,9 @@ int util_write_configfile(void)
 
   if (autoselect_snaptape_options.v==0)       ADD_STRING_CONFIG,"--noautoselectfileopt");
   if (screen_show_splash_texts.v==0)          ADD_STRING_CONFIG,"--nosplash");
-  if (screen_show_cpu_usage.v)                ADD_STRING_CONFIG,"--cpu-usage");
+  if (screen_show_cpu_usage.v==0)             ADD_STRING_CONFIG,"--no-cpu-usage");
+  if (screen_show_cpu_temp.v==0)              ADD_STRING_CONFIG,"--no-cpu-temp");
+  if (screen_show_fps.v==0)                   ADD_STRING_CONFIG,"--no-fps");  
   if (opcion_no_splash.v)                     ADD_STRING_CONFIG,"--nowelcomemessage");
 
   if (menu_hide_vertical_percentaje_bar.v) ADD_STRING_CONFIG,"--hide-menu-percentage-bar");
@@ -3502,6 +3705,8 @@ int util_write_configfile(void)
 
   if (menu_invert_mouse_scroll.v)             ADD_STRING_CONFIG,"--invert-menu-mouse-scroll");
 
+  if (menu_allow_background_windows)          ADD_STRING_CONFIG,"--allow-background-windows");
+                     
 
                                               ADD_STRING_CONFIG,"--menu-mix-method \"%s\"",screen_menu_mix_methods_strings[screen_menu_mix_method]);
 
@@ -3518,6 +3723,9 @@ int util_write_configfile(void)
   if (rainbow_enabled.v)                      ADD_STRING_CONFIG,"--realvideo");
 
   if (autodetect_rainbow.v==0)                ADD_STRING_CONFIG,"--no-detect-realvideo");
+
+  if (tbblue_store_scanlines.v)               ADD_STRING_CONFIG,"--tbblue-legacy-hicolor");
+  if (tbblue_store_scanlines_border.v)        ADD_STRING_CONFIG,"--tbblue-legacy-border");
 
   //if (tsconf_si_render_spritetile_rapido.v)   ADD_STRING_CONFIG,"--tsconf-fast-render");
 
@@ -3559,6 +3767,10 @@ int util_write_configfile(void)
                                               ADD_STRING_CONFIG,"--midi-client %d",audio_midi_client);
                                               ADD_STRING_CONFIG,"--midi-port %d",audio_midi_port);
 
+                                              ADD_STRING_CONFIG,"--midi-raw-device %s",audio_raw_midi_device_out);
+  if (audio_midi_raw_mode==0)                 ADD_STRING_CONFIG,"--midi-no-raw-mode");
+		
+
   if (midi_output_record_noisetone.v)         ADD_STRING_CONFIG,"--midi-allow-tone-noise");			
 
 
@@ -3595,6 +3807,8 @@ int util_write_configfile(void)
  
   if (menu_limit_menu_open.v)                 ADD_STRING_CONFIG,"--limitopenmenu");
 
+  if (setting_machine_selection_by_name.v)    ADD_STRING_CONFIG,"--setmachinebyname");
+
   if (menu_filesel_hide_dirs.v)         ADD_STRING_CONFIG,"--hide-dirs");
 
   if (menu_desactivado.v)                     ADD_STRING_CONFIG,"--disablemenu");
@@ -3622,6 +3836,9 @@ int util_write_configfile(void)
 
   if (stats_asked.v)                          ADD_STRING_CONFIG,"--stats-send-already-asked");
   if (stats_enabled.v)                        ADD_STRING_CONFIG,"--stats-send-enabled");
+
+  if (tbblue_autoconfigure_sd_asked.v)             ADD_STRING_CONFIG,"--tbblue-autoconfigure-sd-already-asked");
+
           
 
   if (stats_uuid[0]!=0)                      ADD_STRING_CONFIG,"--stats-uuid %s",stats_uuid);
@@ -3652,6 +3869,34 @@ int util_write_configfile(void)
        ADD_STRING_CONFIG,"--windowgeometry %s %d %d %d %d", saved_config_window_geometry_array[i].nombre,
        saved_config_window_geometry_array[i].x,saved_config_window_geometry_array[i].y,
         saved_config_window_geometry_array[i].ancho,saved_config_window_geometry_array[i].alto);
+  }
+
+  if (menu_reopen_background_windows_on_start.v) ADD_STRING_CONFIG,"--enable-restore-windows");
+			
+
+  if (menu_allow_background_windows && menu_reopen_background_windows_on_start.v) {
+        //Guardar lista de ventanas activas
+	//Empezamos una a una, desde la de mas abajo
+	zxvision_window *ventana;
+
+	ventana=zxvision_current_window;
+
+	if (ventana!=NULL) {
+
+                ventana=zxvision_find_first_window_below_this(ventana);
+
+                while (ventana!=NULL) {
+
+                        if (ventana->geometry_name[0]!=0 && ventana->can_be_backgrounded) {
+                                ADD_STRING_CONFIG,"--restorewindow \"%s\"",ventana->geometry_name);
+                        }
+
+
+                        ventana=ventana->next_window;
+                                        
+                }
+        }
+
   }
 
 
@@ -4129,21 +4374,37 @@ void convert_numeros_letras_puerto_teclado_continue_after_recreated(z80_byte tec
       else *puerto |=mascara;
 
 
-					if (MACHINE_IS_Z88) {
-						puerto=z88_tabla_teclado_letras[indice].puerto;
-						mascara=z88_tabla_teclado_letras[indice].mascara;
+        if (MACHINE_IS_Z88) {
+                puerto=z88_tabla_teclado_letras[indice].puerto;
+                mascara=z88_tabla_teclado_letras[indice].mascara;
 
-						if (pressrelease) *puerto &=255-mascara;
-						else *puerto |=mascara;
-					}
+                if (pressrelease) *puerto &=255-mascara;
+                else *puerto |=mascara;
+        }
 
-					if (MACHINE_IS_CPC) {
-						puerto=cpc_tabla_teclado_letras[indice].puerto;
-                                                mascara=cpc_tabla_teclado_letras[indice].mascara;
+        if (MACHINE_IS_CPC) {
+                puerto=cpc_tabla_teclado_letras[indice].puerto;
+                mascara=cpc_tabla_teclado_letras[indice].mascara;
 
-                                                if (pressrelease) *puerto &=255-mascara;
-                                                else *puerto |=mascara;
-          }
+                if (pressrelease) *puerto &=255-mascara;
+                else *puerto |=mascara;
+         }
+
+        if (MACHINE_IS_MSX) {
+                puerto=msx_tabla_teclado_letras[indice].puerto;
+                mascara=msx_tabla_teclado_letras[indice].mascara;
+
+                if (pressrelease) *puerto &=255-mascara;
+                else *puerto |=mascara;
+         }         
+
+        if (MACHINE_IS_SVI) {
+                puerto=svi_tabla_teclado_letras[indice].puerto;
+                mascara=svi_tabla_teclado_letras[indice].mascara;
+
+                if (pressrelease) *puerto &=255-mascara;
+                else *puerto |=mascara;
+         }             
 
           if (MACHINE_IS_QL) {
             puerto=ql_tabla_teclado_letras[indice].puerto;
@@ -4270,6 +4531,22 @@ void convert_numeros_letras_puerto_teclado_continue_after_recreated(z80_byte tec
                                                 else *puerto |=mascara;
   }
 
+	if (MACHINE_IS_MSX) {
+                                                puerto=msx_tabla_teclado_numeros[indice].puerto;
+                                                mascara=msx_tabla_teclado_numeros[indice].mascara;
+
+                                                if (pressrelease) *puerto &=255-mascara;
+                                                else *puerto |=mascara;
+  }  
+
+	if (MACHINE_IS_SVI) {
+                                                puerto=svi_tabla_teclado_numeros[indice].puerto;
+                                                mascara=svi_tabla_teclado_numeros[indice].mascara;
+
+                                                if (pressrelease) *puerto &=255-mascara;
+                                                else *puerto |=mascara;
+  }    
+
   if (MACHINE_IS_QL) {
                                           puerto=ql_tabla_teclado_numeros[indice].puerto;
                                           mascara=ql_tabla_teclado_numeros[indice].mascara;
@@ -4341,6 +4618,10 @@ int quickload_valid_extension(char *nombre) {
     || !util_compare_file_extension(nombre,"ay")
     || !util_compare_file_extension(nombre,"scr")
     || !util_compare_file_extension(nombre,"rzx")
+    || !util_compare_file_extension(nombre,"rom")
+    || !util_compare_file_extension(nombre,"col")
+    || !util_compare_file_extension(nombre,"sg")
+    || !util_compare_file_extension(nombre,"sc")
 	) {
 		return 1;
 	}
@@ -4750,6 +5031,73 @@ int quickload_continue(char *nombre) {
 
         }
 
+	//Cartuchos de MSX
+	else if (
+                !util_compare_file_extension(nombre,"rom")
+        ) {
+		//Aqui el autoload da igual. cambiamos siempre a msx si conviene
+                if (!MACHINE_IS_MSX) {
+			current_machine_type=MACHINE_ID_MSX1;
+                        set_machine(NULL);
+
+                                //establecer parametros por defecto. Incluido quitar slots de memoria
+                           set_machine_params();
+
+                          reset_cpu();
+                }
+
+                msx_insert_rom_cartridge(nombre);
+
+
+                return 0;
+
+        }        
+
+	//Cartuchos de Coleco
+	else if (
+                !util_compare_file_extension(nombre,"col")
+        ) {
+		//Aqui el autoload da igual. cambiamos siempre a coleco si conviene
+                if (!MACHINE_IS_COLECO) {
+			current_machine_type=MACHINE_ID_COLECO;
+                        set_machine(NULL);
+
+                                //establecer parametros por defecto. Incluido quitar slots de memoria
+                           set_machine_params();
+
+                          reset_cpu();
+                }
+
+                coleco_insert_rom_cartridge(nombre);
+
+
+                return 0;
+
+        }           
+
+	//Cartuchos de SG1000
+	else if (
+                !util_compare_file_extension(nombre,"sg")
+             || !util_compare_file_extension(nombre,"sc")
+        ) {
+		//Aqui el autoload da igual. cambiamos siempre a sg1000 si conviene
+                if (!MACHINE_IS_SG1000) {
+			current_machine_type=MACHINE_ID_SG1000;
+                        set_machine(NULL);
+
+                                //establecer parametros por defecto. Incluido quitar slots de memoria
+                           set_machine_params();
+
+                          reset_cpu();
+                }
+
+                sg1000_insert_rom_cartridge(nombre);
+
+
+                return 0;
+
+        }              
+
 
 	//eprom cards de Z88
         else if (
@@ -5087,6 +5435,24 @@ int lee_archivo(char *nombre,char *buffer,int max_longitud)
 
 }
 
+
+/*
+void util_set_reset_key_msx_keymap(enum util_teclas_msx_keymap tecla,int pressrelease)
+{
+        switch (tecla) {
+			case UTIL_KEY_MSX_MINUS:
+                                if (pressrelease) {
+                                        msx_keyboard_table[1] &=255-4;
+                                }
+                                else {
+                                        msx_keyboard_table[1] |=4;
+                                }
+                        break;
+        }
+
+}
+*/
+
 void util_set_reset_key_cpc_keymap(enum util_teclas_cpc_keymap tecla,int pressrelease)
 {
         switch (tecla) {
@@ -5312,11 +5678,15 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                 if (pressrelease) {
                                         puerto_teclado_sam_eff9 &= 255-32;
                                         ql_keyboard_table[5] &= 255-32;
+                                        msx_keyboard_table[1] &=255-4;
+                                        svi_keyboard_table[2] &=255-1;
                                         //printf ("tecla minus\n");
                                 }
                                 else {
                                         puerto_teclado_sam_eff9 |= 32;
                                         ql_keyboard_table[5] |= 32;
+                                        msx_keyboard_table[1] |=4;
+                                        svi_keyboard_table[2] |=1;
                                 }
                         break;
 
@@ -5324,10 +5694,14 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                 if (pressrelease) {
                                         puerto_teclado_sam_eff9 &= 255-64;
                                         ql_keyboard_table[3] &= 255-32;
+                                        msx_keyboard_table[1] &= 255-8;
+                                        svi_keyboard_table[1] &=255-32;
                                 }
                                 else {
                                         puerto_teclado_sam_eff9 |= 64;
                                         ql_keyboard_table[3] |= 32;
+                                        msx_keyboard_table[1] |=8;
+                                        svi_keyboard_table[1] |=32;
                                 }
                         break;
 
@@ -5335,9 +5709,13 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                 if (pressrelease) {
                                   // 6|   Ret   Left     Up    Esc  Right      \  Space   Down     ql_keyboard_table[1]
                                   ql_keyboard_table[1] &=255-32;
+                                  msx_keyboard_table[1] &= 255-16;
+                                  svi_keyboard_table[5] &= 255-16;
                                 }
                                 else {
                                   ql_keyboard_table[1] |=32;
+                                  msx_keyboard_table[1] |=16;
+                                  svi_keyboard_table[5] |= 16;
                                 }
                         break;
 
@@ -5348,10 +5726,14 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
 					                             puerto_teclado_sam_dff9 &= 255-32;
                                        //// 4|     [   Caps      k      s      f      =      g      ;     ql_keyboard_table[3]
                                        ql_keyboard_table[3] &=255-1;
+                                       msx_keyboard_table[1] &= 255-32;
+                                       svi_keyboard_table[5] &= 255-8;
                                 }
                                 else {
 					                             puerto_teclado_sam_dff9 |= 32;
                                        ql_keyboard_table[3] |=1;
+                                       msx_keyboard_table[1] |=32;
+                                       svi_keyboard_table[5] |= 8;
                                 }
                         break;
 
@@ -5361,10 +5743,14 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
 					                             puerto_teclado_sam_dff9 &= 255-64;
                                        // 5|     ]      z      .      c      b  Pound      m      '     ql_keyboard_table[2]
                                        ql_keyboard_table[2] &=255-1;
+                                       msx_keyboard_table[1] &= 255-64;
+                                       svi_keyboard_table[5] &= 255-32;
                                 }
                                 else {
                                         puerto_teclado_sam_dff9 |= 64;
                                         ql_keyboard_table[2] |=1;
+                                        msx_keyboard_table[1] |=64;
+                                        svi_keyboard_table[5] |= 32;
                                 }
                         break;
 
@@ -5372,9 +5758,13 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                 if (pressrelease) {
                                       // 4|     [   Caps      k      s      f      =      g      ;     ql_keyboard_table[3]
                                       ql_keyboard_table[3] &=255-128;
+                                      msx_keyboard_table[1] &= 255-128;
+                                      svi_keyboard_table[1] &= 255-4;
                                 }
                                 else {
                                       ql_keyboard_table[3] |=128;
+                                      msx_keyboard_table[1] |=128;
+                                      svi_keyboard_table[1] |= 4;
                                 }
                         break;
 
@@ -5383,10 +5773,14 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                         puerto_teclado_sam_bff9 &= 255-32;
                                         // 5|     ]      z      .      c      b  Pound      m      '     ql_keyboard_table[2]
                                         ql_keyboard_table[2] &=255-128;
+                                        msx_keyboard_table[2] &= 255-1;
+                                        svi_keyboard_table[1] &= 255-8;
                                 }
                                 else {
                                         puerto_teclado_sam_bff9 |= 32;
                                         ql_keyboard_table[2] |=128;
+                                         msx_keyboard_table[2] |= 1;
+                                        svi_keyboard_table[1] |= 8;
                                 }
                         break;
 
@@ -5395,10 +5789,12 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                         puerto_teclado_sam_bff9 &= 255-64;
                                         //// 5|     ]      z      .      c      b  Pound      m      '     ql_keyboard_table[2]
                                         ql_keyboard_table[2] &=255-32;
+                                        msx_keyboard_table[2] &= 255-2;
                                 }
                                 else {
                                         puerto_teclado_sam_bff9 |= 64;
                                         ql_keyboard_table[2] |=32;
+                                        msx_keyboard_table[2] |= 2;
                                 }
                         break;
 
@@ -5407,11 +5803,15 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                 if (pressrelease) {
 					                              puerto_teclado_sam_7ff9 &= 255-32;
                                         ql_keyboard_table[7] &=(255-128);
+                                        msx_keyboard_table[2] &= 255-4;
+                                        svi_keyboard_table[1] &= 255-16;
 
                                 }
                                 else {
 					                             puerto_teclado_sam_7ff9 |= 32;
                                        ql_keyboard_table[7] |=128;
+                                       msx_keyboard_table[2] |= 4;
+                                       svi_keyboard_table[1] |= 16;
                                 }
                         break;
 
@@ -5419,10 +5819,14 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
                                  if (pressrelease) {
 					                              puerto_teclado_sam_7ff9 &= 255-64;
                                         ql_keyboard_table[2] &=(255-4);
+                                        msx_keyboard_table[2] &= 255-8;
+                                        svi_keyboard_table[1] &= 255-64;
                                  }
                                  else {
 					                              puerto_teclado_sam_7ff9 |= 64;
                                         ql_keyboard_table[2] |=4;
+                                        msx_keyboard_table[2] |= 8;
+                                        svi_keyboard_table[1] |= 64;
                                  }
                         break;
 
@@ -5431,10 +5835,14 @@ void util_set_reset_key_common_keymap(enum util_teclas_common_keymap tecla,int p
 					                              puerto_teclado_sam_7ff9 &= 255-128;
                                         // 0| Shift   Ctrl    Alt      x      v      /      n      ,     ql_keyboard_table[7]
                                         ql_keyboard_table[7] &=255-32;
+                                        msx_keyboard_table[2] &= 255-16;
+                                        svi_keyboard_table[1] &= 255-128;
                                  }
                                  else {
 					                              puerto_teclado_sam_7ff9 |= 128;
                                         ql_keyboard_table[7] |=32;
+                                        msx_keyboard_table[2] |= 16;
+                                        svi_keyboard_table[1] |= 128;
                                  }
                         break;
 
@@ -5733,6 +6141,9 @@ void util_set_reset_mouse(enum util_mouse_buttons boton,int pressrelease)
         //printf ("reseteamos mouse_pressed_close_window desde utils ventana\n");
         //puerto_especial1 |=1;
         mouse_pressed_close_window=0;
+        mouse_pressed_background_window=0;
+        mouse_pressed_hotkey_window=0;
+        mouse_pressed_hotkey_window_key=0;
 
       }
     break;
@@ -6081,7 +6492,9 @@ int util_set_reset_key_continue_f_functions(enum util_teclas tecla,int pressrele
 
   debug_printf (VERBOSE_DEBUG,"Key: F%d Action: %s",indice+1,defined_f_functions_array[accion].texto_funcion);
 
-  if (accion!=F_FUNCION_DEFAULT) {
+  //Abrir menu si funcion no es defecto y no es background window
+  //if (accion!=F_FUNCION_DEFAULT && accion!=F_FUNCION_BACKGROUND_WINDOW) {
+  if (accion!=F_FUNCION_DEFAULT) {          
     if (pressrelease) {
       //Activar funcion f en menu
       menu_button_f_function.v=1;
@@ -6314,14 +6727,18 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                 if (pressrelease) {
                                         puerto_32766 &=255-1;
                                         blink_kbd_a13 &= (255-64);
-					                              cpc_keyboard_table[5] &= (255-128);
+				        cpc_keyboard_table[5] &= (255-128);
                                         ql_keyboard_table[1] &= (255-64);
+                                        msx_keyboard_table[8] &= (255-1);
+                                        svi_keyboard_table[8] &= (255-1);
                                 }
                                 else {
                                         puerto_32766 |=1;
                                         blink_kbd_a13 |= 64;
 					                              cpc_keyboard_table[5] |= 128;
                                         ql_keyboard_table[1] |= 64;
+                                        msx_keyboard_table[8] |= 1;
+                                        svi_keyboard_table[8] |= 1;
                                 }
                         break;
 
@@ -6331,6 +6748,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         blink_kbd_a8 &= (255-64);
 					                              cpc_keyboard_table[0] &= (255-64);
                                         ql_keyboard_table[1] &= (255-1);
+                                        msx_keyboard_table[7] &= (255-128);
+                                        svi_keyboard_table[6] &= (255-64);
 
 					//Avisar de envio enter especial para rutinas de speech, para que envien sonido
 					textspeech_send_new_line();
@@ -6342,6 +6761,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         blink_kbd_a8 |=64;
 					                              cpc_keyboard_table[0] |= 64;
                                         ql_keyboard_table[1] |= 1;
+                                        msx_keyboard_table[7] |= 128;
+                                        svi_keyboard_table[6] |= 64;
                                 }
 
 
@@ -6367,12 +6788,16 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         blink_kbd_a14 &= (255-64);
 					                              cpc_keyboard_table[2] &=255-32;
                                         ql_keyboard_table[7] &= (255-1);
+                                        msx_keyboard_table[6] &=(255-1);
+                                        svi_keyboard_table[6] &=(255-1);
                                 }
                                 else  {
                                         puerto_65278 |=1;
                                         blink_kbd_a14 |= 64;
                                         ql_keyboard_table[7] |= 1;
 					cpc_keyboard_table[2] |=32;
+                                        msx_keyboard_table[6] |=1;
+                                        svi_keyboard_table[6] |=1;
                                 }
                         break;
 
@@ -6385,12 +6810,16 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         blink_kbd_a15 &= (255-128);
 					                              cpc_keyboard_table[2] &=255-32;
                                         ql_keyboard_table[7] &= (255-1);
+                                        msx_keyboard_table[6] &=(255-1);
+                                        svi_keyboard_table[6] &=(255-1);
                                 }
                                 else  {
                                         puerto_65278 |=1;
                                         blink_kbd_a15 |= 128;
 					                              cpc_keyboard_table[2] |=32;
                                         ql_keyboard_table[7] |= 1;
+                                        msx_keyboard_table[6] |=1;
+                                        svi_keyboard_table[6] |=1;
                                 }
                         break;
 
@@ -6418,6 +6847,10 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 						//ALT en CPC es CLR
 						cpc_keyboard_table[2] &=(255-1);
                                                 ql_keyboard_table[7] &= (255-4);
+
+                                                //ALT en MSX es stop
+                                                msx_keyboard_table[7] &= (255-16);
+                                                svi_keyboard_table[6] &= (255-32);
                                         }
 
 
@@ -6428,6 +6861,10 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 						//ALT en CPC es CLR
 						cpc_keyboard_table[2] |=1;
                                                 ql_keyboard_table[7] |= 4;
+
+                                                //ALT en MSX es stop
+                                                msx_keyboard_table[7] |= 16;
+                                                svi_keyboard_table[6] |= 32;
                                         }
                                 }
                         break;
@@ -6510,6 +6947,7 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                                 puerto_32766  &=255-2;
                                                 blink_kbd_a14 &= (255-16);
 						cpc_keyboard_table[2] &=(255-128);
+                                                msx_keyboard_table[6] &=(255-2);
                                                 ql_keyboard_table[7] &= (255-2);
 
 
@@ -6520,6 +6958,7 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                                 puerto_32766 |=2;
                                                 blink_kbd_a14 |= 16;
 						cpc_keyboard_table[2] |=128;
+                                                msx_keyboard_table[6] |=2;
                                                 ql_keyboard_table[7] |= 2;
 
                                         }
@@ -6542,6 +6981,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                 	                        puerto_61438 &=255-1;
                         	                blink_kbd_a8 &= (255-128);
 						                              cpc_keyboard_table[9] &=(255-128);
+                                                msx_keyboard_table[7] &=(255-32);
+                                                svi_keyboard_table[5] &=(255-64);
                                           ql_pressed_backspace=1;
 
 	                                }
@@ -6550,6 +6991,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                         	                puerto_61438 |=1;
                                 	        blink_kbd_a8 |= 128;
 						                              cpc_keyboard_table[9] |=128;
+                                                msx_keyboard_table[7] |=32;
+                                                svi_keyboard_table[5] |=64;
                                           ql_pressed_backspace=0;
 	                                }
 				}
@@ -6578,6 +7021,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         joystick_set_left(1);
                                         blink_kbd_a12 &= (255-64);
 					cpc_keyboard_table[1] &=(255-1);
+                                        msx_keyboard_table[8] &=(255-16);
+                                        svi_keyboard_table[6] &=(255-128);
 
           // 1|   Ret   Left     Up    Esc  Right      \  Space   Down
                                         ql_keyboard_table[1] &= (255-2);
@@ -6588,6 +7033,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         joystick_release_left(1);
                                         blink_kbd_a12 |= 64;
 					                              cpc_keyboard_table[1] |=1;
+                                        msx_keyboard_table[8] |=16;
+                                        svi_keyboard_table[6] |=128;
                                         ql_keyboard_table[1] |= 2;
                                 }
                         break;
@@ -6598,6 +7045,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         joystick_set_right(1);
                                         blink_kbd_a11 &= (255-64);
 					                              cpc_keyboard_table[0] &=(255-2);
+                                        msx_keyboard_table[8] &=(255-128);
+                                        svi_keyboard_table[8] &=(255-128);
                                         ql_keyboard_table[1] &= (255-16);
                                 }
                                 else {
@@ -6606,7 +7055,9 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         joystick_release_right(1);
                                         blink_kbd_a11 |= 64;
                                         cpc_keyboard_table[0] |=2;
-                                        ql_keyboard_table[1] |= 16;
+                                        msx_keyboard_table[8] |=128;
+                                        svi_keyboard_table[8] |=128;
+                                        ql_keyboard_table[1] |= 16;                                      
                                 }
                         break;
 
@@ -6618,6 +7069,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 
                                         blink_kbd_a10 &= (255-64);
 					cpc_keyboard_table[0] &=(255-4);
+                                        msx_keyboard_table[8] &=(255-64);
+                                        svi_keyboard_table[7] &=(255-128);
                                         ql_keyboard_table[1] &= (255-128);
 
                                 }
@@ -6628,6 +7081,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 
                                         blink_kbd_a10 |= 64;
 					cpc_keyboard_table[0] |=4;
+                                        msx_keyboard_table[8] |=64;
+                                        svi_keyboard_table[7] |=128;
                                         ql_keyboard_table[1] |= 128;
                                 }
                         break;
@@ -6639,6 +7094,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         joystick_set_up(1);
                                         blink_kbd_a9 &= (255-64);
 					cpc_keyboard_table[0] &=(255-1);
+                                        msx_keyboard_table[8] &=(255-32);
+                                        svi_keyboard_table[5] &=(255-128);
                                         ql_keyboard_table[1] &= (255-4);
                                 }
                                 else {
@@ -6647,6 +7104,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                         joystick_release_up(1);
                                         blink_kbd_a9 |= 64;
 					cpc_keyboard_table[0] |=1;
+                                        msx_keyboard_table[8] |=32;
+                                        svi_keyboard_table[5] |=128;
                                         ql_keyboard_table[1] |=4;
                                 }
                         break;
@@ -6759,6 +7218,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                         	                blink_kbd_a14 &= (255-32);
 						                              cpc_keyboard_table[8]&= (255-16);
                                           // 2|     9      w      i    Tab      r      -      y      o     ql_keyboard_table[5]
+
+                                          msx_keyboard_table[7] &=(255-8);
                                           ql_keyboard_table[5] &=(255-8);
         	                        }
 
@@ -6769,6 +7230,7 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                         	                puerto_32766 |=2;
                 	                        blink_kbd_a14 |= 32;
 						                              cpc_keyboard_table[8]|= 16;
+                                        msx_keyboard_table[7] |=8;
                                           ql_keyboard_table[5] |=8;
 	                                }
 				}
@@ -6786,16 +7248,20 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
         	                                puerto_65278 &=255-1;
                 	                        puerto_63486 &=255-2;
                         	                blink_kbd_a15 &= (255-8);
-						                              cpc_keyboard_table[8] &=(255-64);
-                                          // 4|     [   Caps      k      s      f      =      g      ;     ql_keyboard_table[3]
-                                          ql_keyboard_table[3] &=(255-2);
+                                                cpc_keyboard_table[8] &=(255-64);
+                                                // 4|     [   Caps      k      s      f      =      g      ;     ql_keyboard_table[3]
+                                                msx_keyboard_table[6] &=(255-8);
+                                                svi_keyboard_table[8] &=(255-8);
+                                                ql_keyboard_table[3] &=(255-2);
 	                                }
         	                        else {
                 	                        puerto_65278 |=1;
                         	                puerto_63486 |=2;
                                 	        blink_kbd_a15 |= 8;
-						                              cpc_keyboard_table[8] |=64;
-                                          ql_keyboard_table[3] |=2;
+                                                cpc_keyboard_table[8] |=64;
+                                                msx_keyboard_table[6] |=8;
+                                                svi_keyboard_table[8] |=8;
+                                                ql_keyboard_table[3] |=2;
 	                                }
 				}
                         break;
@@ -6917,10 +7383,14 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                 if (pressrelease) {
                                         blink_kbd_a14 &= (255-128);
                                         ql_keyboard_table[0] &= (255-2);
+                                        msx_keyboard_table[6] &= (255-32);
+                                        svi_keyboard_table[7] &=(255-1);
                                 }
                                 else {
                                         blink_kbd_a14 |= 128;
                                         ql_keyboard_table[0] |= 2;
+                                        msx_keyboard_table[6] |= 32;
+                                        svi_keyboard_table[7] |=1;
                                 }
                         break;
 
@@ -6930,10 +7400,14 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                 if (pressrelease) {
                                         blink_kbd_a15 &= (255-16);
                                         ql_keyboard_table[0] &= (255-8);
+                                        msx_keyboard_table[6] &= (255-64);
+                                        svi_keyboard_table[7] &=(255-2);
                                 }
                                 else {
                                         blink_kbd_a15 |= 16;
                                         ql_keyboard_table[0] |= 8;
+                                        msx_keyboard_table[6] |= 64;
+                                        svi_keyboard_table[7] |=2;
                                 }
                         break;
 
@@ -6944,10 +7418,14 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                 if (pressrelease) {
                                         blink_kbd_a14 &= (255-8);
                                         ql_keyboard_table[0] &= (255-16);
+                                        msx_keyboard_table[6] &= (255-128);
+                                        svi_keyboard_table[7] &=(255-4);
                                 }
                                 else {
                                         blink_kbd_a14 |= 8;
                                         ql_keyboard_table[0] |= 16;
+                                        msx_keyboard_table[6] |= 128;
+                                        svi_keyboard_table[7] |=4;
                                 }
                         break;
 
@@ -6955,11 +7433,16 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 			case UTIL_KEY_F4:
 			if (pressrelease) {
                                    if (!menu_abierto) textspeech_enviar_speech_pantalla();
+
                                    ql_keyboard_table[0] &= (255-1);
+                                   msx_keyboard_table[7] &= (255-1);
+                                   svi_keyboard_table[7] &=(255-8);
                                  }
 
                                  else {
                                    ql_keyboard_table[0] |= 1;
+                                   msx_keyboard_table[7] |= 1;
+                                   svi_keyboard_table[7] |=8;
                                  }
 		        break;
 
@@ -6969,9 +7452,14 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
                                 if (pressrelease) {
 					if (util_if_open_just_menu() )  menu_fire_event_open_menu();
                                         ql_keyboard_table[0] &= (255-32); //Caso especial F5 y QL
+
+                                        msx_keyboard_table[7] &= (255-2);
+                                        svi_keyboard_table[7] &=(255-16);
                                 }
                                 else {
                                         ql_keyboard_table[0] |= 32;
+                                        msx_keyboard_table[7] |= 2;
+                                        svi_keyboard_table[7] |=16;
                                 }
                         break;
 
@@ -7019,7 +7507,7 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 
                                 if (pressrelease) {
                                         menu_abierto=1;
-                                        menu_button_quickload.v=1;
+                                        menu_button_smartload.v=1;
                                 }
                                 else {
                                 }
@@ -7109,6 +7597,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 					blink_kbd_a15 &= (255-32);
 					puerto_especial1 &=255-1;
 					cpc_keyboard_table[8] &=(255-4);
+                                        msx_keyboard_table[7] &=(255-4);
+                                        svi_keyboard_table[6] &= (255-16);
 					puerto_teclado_sam_f7f9 &= (255-32);
           // 6|   Ret   Left     Up    Esc  Right      \  Space   Down     ql_keyboard_table[1]
           ql_keyboard_table[1] &= (255-8);
@@ -7121,6 +7611,8 @@ void util_set_reset_key_continue_after_zeng(enum util_teclas tecla,int pressrele
 					blink_kbd_a15 |=32;
 					puerto_especial1 |=1;
 					cpc_keyboard_table[8] |=4;
+                                        msx_keyboard_table[7] |=4;
+                                        svi_keyboard_table[6] |= 16;
 					puerto_teclado_sam_f7f9 |= 32;
                                         ql_keyboard_table[1] |= 8;
 				}
@@ -9049,60 +9541,111 @@ int convert_p_to_rwa_tmpdir(char *origen, char *destino)
 }
 
 
+
+//Retorna 0 si ok
+//1 si error al abrir archivo 
+//Tiene en cuenta zonas de memoria
+int save_binary_file(char *filename,int valor_leido_direccion,int valor_leido_longitud)
+{
+	
+
+	menu_debug_set_memory_zone_attr();
+
+        char zone_name[MACHINE_MAX_MEMORY_ZONE_NAME_LENGHT+1];
+	menu_get_current_memory_zone_name_number(zone_name);
+
+        if (valor_leido_longitud==0) valor_leido_longitud=menu_debug_memory_zone_size;		
+
+
+	debug_printf(VERBOSE_INFO,"Saving %s file at %d address at zone %s with %d bytes",filename,valor_leido_direccion,zone_name,valor_leido_longitud);
+
+	FILE *ptr_binaryfile_save;
+	ptr_binaryfile_save=fopen(filename,"wb");
+	if (!ptr_binaryfile_save) {
+		
+		debug_printf (VERBOSE_ERR,"Unable to open Binary file %s",filename);
+		return 1;
+	}
+
+	else {
+
+		int escritos=1;
+		z80_byte byte_leido;
+		while (valor_leido_longitud>0 && escritos>0) {
+
+			byte_leido=menu_debug_get_mapped_byte(valor_leido_direccion);
+
+			escritos=fwrite(&byte_leido,1,1,ptr_binaryfile_save);
+			valor_leido_direccion++;
+			valor_leido_longitud--;
+		}
+
+
+		fclose(ptr_binaryfile_save);
+	}
+
+	return 0;
+
+}
+
 //Retorna 0 si ok
 //1 si archivo no encontrado
 //2 si error leyendo
-int load_binary_file(char *binary_file_load,int valor_leido_direccion,int valor_leido_longitud)
+//Tiene en cuenta zonas de memoria
+int load_binary_file(char *filename,int valor_leido_direccion,int valor_leido_longitud)
 {
-  int returncode=0;
+	int returncode=0;
 
-  if (!si_existe_archivo(binary_file_load)) return 1;
+	if (!si_existe_archivo(filename)) return 1;
 
-                if (MACHINE_IS_SPECTRUM) {
-                  if (valor_leido_longitud==0 || valor_leido_longitud>65536) valor_leido_longitud=65536;
+	if (valor_leido_longitud==0) valor_leido_longitud=4194304; //4 MB max
 
-                  //maximo hasta direccion 65535
-                  if (valor_leido_direccion+valor_leido_longitud > 65535) valor_leido_longitud=65536-valor_leido_direccion;
-                }
-
-                else { //MOTOROLA
-                  if (valor_leido_longitud==0) valor_leido_longitud=QL_MEM_LIMIT+1;
-                }
-
-                debug_printf(VERBOSE_INFO,"Loading %s file at %d address with maximum %d bytes",binary_file_load,valor_leido_direccion,valor_leido_longitud);
+    
+	menu_debug_set_memory_zone_attr();
 
 
+	char zone_name[MACHINE_MAX_MEMORY_ZONE_NAME_LENGHT+1];
+	menu_get_current_memory_zone_name_number(zone_name);
 
-                                FILE *ptr_binaryfile_load;
-                                  ptr_binaryfile_load=fopen(binary_file_load,"rb");
-                                  if (!ptr_binaryfile_load)
-                                {
-                                      debug_printf (VERBOSE_ERR,"Unable to open Binary file %s",binary_file_load);
-                                      returncode=2;
-
-                                  }
-                                else {
-
-                                                int leidos=1;
-                                                z80_byte byte_leido;
-                                                while (valor_leido_longitud>0 && leidos>0) {
-                                                        leidos=fread(&byte_leido,1,1,ptr_binaryfile_load);
-                                                        if (leidos>0) {
-                                                                //poke_byte_no_time(valor_leido_direccion,byte_leido);
-                                                                poke_byte_z80_moto(valor_leido_direccion,byte_leido);
-                                                                valor_leido_direccion++;
-                                                                valor_leido_longitud--;
-                                                        }
-                                                }
+	debug_printf(VERBOSE_INFO,"Loading %s file at %d address at zone %s with maximum %d bytes",filename,valor_leido_direccion,zone_name,valor_leido_longitud);
 
 
-                                  fclose(ptr_binaryfile_load);
+	FILE *ptr_binaryfile_load;
+	ptr_binaryfile_load=fopen(filename,"rb");
+	if (!ptr_binaryfile_load) {
+                                
+		debug_printf (VERBOSE_ERR,"Unable to open Binary file %s",filename);
+		returncode=2;
 
-                                }
+	}
+
+	else {
+
+		int leidos=1;
+		z80_byte byte_leido;
+		while (valor_leido_longitud>0 && leidos>0) {
+			leidos=fread(&byte_leido,1,1,ptr_binaryfile_load);
+			if (leidos>0) {
+
+					menu_debug_write_mapped_byte(valor_leido_direccion,byte_leido);
+
+					valor_leido_direccion++;
+					valor_leido_longitud--;
+			}
+		}
+
+
+		fclose(ptr_binaryfile_load);
+
+	}
 
     return returncode;
 
 }
+
+
+
+
 
 
 //extern char *mostrar_footer_game_name;
@@ -9558,6 +10101,12 @@ int get_machine_id_by_name(char *machine_name)
                                 else if (!strcasecmp(machine_name,"SAM")) return_machine=150;
                                 else if (!strcasecmp(machine_name,"QL")) return_machine=160;
                                 else if (!strcasecmp(machine_name,"MK14")) return_machine=MACHINE_ID_MK14_STANDARD;
+                                
+                                else if (!strcasecmp(machine_name,"MSX1")) return_machine=MACHINE_ID_MSX1;
+                                else if (!strcasecmp(machine_name,"COLECO")) return_machine=MACHINE_ID_COLECO;
+                                else if (!strcasecmp(machine_name,"SG1000")) return_machine=MACHINE_ID_SG1000;
+                                else if (!strcasecmp(machine_name,"SVI318")) return_machine=MACHINE_ID_SVI_318;
+                                else if (!strcasecmp(machine_name,"SVI328")) return_machine=MACHINE_ID_SVI_328;
                                 else {
                                         debug_printf (VERBOSE_ERR,"Unknown machine %s",machine_name);
                                         return_machine=-1;
@@ -9921,17 +10470,27 @@ int get_file_type(int d_type, char *nombre)
 
 */
 
-
+#ifdef HAIKU_OS
+	
+#else
 	debug_printf (VERBOSE_DEBUG,"Name: %s type: %d constants: DT_DIR: %d DT_REG: %d DT_LNK: %d",
 			nombre,d_type,DT_DIR,DT_REG,DT_LNK);
+#endif
+
 
 #ifndef MINGW
 
+#ifdef HAIKU_OS
+	return 1; //Asumimos siempre tipo archivo regular
+#else
 
 	if (d_type == DT_DIR) return 2;
 	if (d_type == DT_REG || d_type == DT_LNK) return 1;
 
 	return 0;
+#endif
+
+
 #else
 /*
 24 puede significar 16+8:
@@ -10638,7 +11197,10 @@ int util_tape_tap_get_info(z80_byte *tape,char *texto)
 z80_byte peek_byte_z80_moto(unsigned int address)
 {
   address=adjust_address_space_cpu(address);
-  if (MACHINE_IS_QL) return ql_readbyte_no_ports(address);
+
+  //if (MACHINE_IS_QL) return ql_readbyte_no_ports(address);
+  if (MACHINE_IS_QL) return ql_readbyte_no_ports_function(address);
+
   else return peek_byte_no_time(address);
 }
 
@@ -10783,6 +11345,87 @@ int util_parse_commands_argvc(char *texto, char *parm_argv[], int maximo)
                 }
 
                 if ( (*texto)==0) return args;
+
+                *texto=0; //Separar cadena
+                texto++;
+        }
+
+        return args;
+}
+
+
+//Separar comando con codigos 0 y rellenar array de parametros, parecido a 
+//util_parse_commands_argvc pero tienendo en cuenta si hay comillas
+int util_parse_commands_argvc_comillas(char *texto, char *parm_argv[], int maximo)
+{
+
+        int args=0;
+
+        //Si se han leido en algun momento al parsear un parametro
+        int comillas_algun_momento=0;
+
+
+        while (*texto) {
+                //Inicio parametro
+                parm_argv[args++]=texto;
+                if (args==maximo) {
+                        debug_printf(VERBOSE_DEBUG,"Max parameters reached (%d)",maximo);
+                        return args;
+                }
+
+                //Ir hasta espacio o final
+
+                comillas_algun_momento=0;
+
+                //Variable que va conmutando segun se lee
+                int comillas_leidas=0;
+
+                int antes_escape=0;
+
+                //TODO: al escapar comillas , incluye el caracter de escape tambien
+                //esto sucede porque estamos escribiendo en el mismo sitio que leemos
+                //deberia tener una cadena origen y una destino distintas
+
+                //TODO: controlar parametros como : 123"456 -> en este caso resulta: 23"45
+
+                while (*texto && (*texto!=' ' || comillas_leidas)  ) {
+                        //Si son comillas y no escapadas
+                        if ((*texto)=='"' && !antes_escape) {
+                                //printf ("Leemos comillas\n");
+                                comillas_leidas ^=1;
+
+                                comillas_algun_momento=1;
+                        }
+
+                        if ( (*texto)=='\\') antes_escape=1;
+                        else antes_escape=0;
+
+                        texto++;
+                }
+
+                if (comillas_algun_momento) {
+                        //Se ha leido en algun momento. Quitar comillas iniciales y finales
+                        //Lo que hacemos es cambiar el inicio de parametro a +1
+                        
+                        //printf ("Ajustar parametro porque esta entre comillas\n");
+
+                        char *inicio_parametro;
+                        inicio_parametro=parm_argv[args-1];
+
+                        inicio_parametro++;
+
+                        parm_argv[args-1]=inicio_parametro;
+
+                        //Y quitar comillas del final
+                        *(texto-1)=0;
+
+                        //printf ("Parametro ajustado sin comillas: [%s]\n",parm_argv[args-1]);
+
+                }                
+
+                if ( (*texto)==0) return args;
+ 
+
 
                 *texto=0; //Separar cadena
                 texto++;
@@ -10958,7 +11601,14 @@ unsigned int machine_get_memory_zone_attrib(int zone, int *readwrite)
       if (MACHINE_IS_Z88) {
       	size=0; //Solo zona memoria de 4 mb en caso de z88
       }
+
+      if (MACHINE_IS_MSX) {
+      	size=0; //Mostrar zona de memoria de 256kb en caso de msx
+      }      
  
+       if (MACHINE_IS_SVI) {
+      	size=0; //Mostrar zona de memoria de 256kb en caso de msx
+      }     
 
     break;
 
@@ -11015,6 +11665,13 @@ unsigned int machine_get_memory_zone_attrib(int zone, int *readwrite)
       if (MACHINE_IS_SAM) {
 	size=32768;
       }
+
+      if (MACHINE_IS_MSX) {
+	size=32768;
+      }      
+      if (MACHINE_IS_SVI) {
+	size=32768;
+      }   
 
       if (MACHINE_IS_Z88) {
       	size=0; //Solo zona memoria de 4 mb en caso de z88
@@ -11127,7 +11784,7 @@ unsigned int machine_get_memory_zone_attrib(int zone, int *readwrite)
     case 14:
       if (MACHINE_IS_TBBLUE) {
         *readwrite=3;
-        size=TBBLUE_MAX_SPRITES*TBBLUE_SPRITE_SIZE;
+        size=TBBLUE_SPRITE_ARRAY_PATTERN_SIZE;
       }
     break;    
 
@@ -11210,7 +11867,53 @@ unsigned int machine_get_memory_zone_attrib(int zone, int *readwrite)
           *readwrite=1;      
 	  size=IFROM_SIZE;
 	}
-    break;        
+    break;       
+
+
+    case MEMORY_ZONE_MSX_VRAM:
+        if (MACHINE_IS_MSX) {
+              *readwrite=1; 
+              size=16384;  
+        }
+    break;
+
+    case MEMORY_ZONE_MSX_ALL_MEM:
+        if (MACHINE_IS_MSX) {
+              *readwrite=1; 
+              size=256*1024;  //Zona entera de los 256kb
+        }
+    break;  
+
+
+    case MEMORY_ZONE_SVI_VRAM:
+        if (MACHINE_IS_SVI) {
+              *readwrite=1; 
+              size=16384;  
+        }
+    break;
+
+    case MEMORY_ZONE_SVI_ALL_MEM:
+        if (MACHINE_IS_SVI) {
+              *readwrite=1; 
+              size=256*1024;  //Zona entera de los 256kb
+        }
+    break;      
+
+    case MEMORY_ZONE_COLECO_VRAM:
+        if (MACHINE_IS_COLECO) {
+              *readwrite=1; 
+              size=16384;  
+        }
+    break;
+    
+
+    case MEMORY_ZONE_SG1000_VRAM:
+        if (MACHINE_IS_SG1000) {
+              *readwrite=1; 
+              size=16384;  
+        }
+    break;
+
 
   }
 
@@ -11515,8 +12218,46 @@ z80_byte *machine_get_memory_zone_pointer(int zone, int address)
         if (ifrom_enabled.v) {
 	p=&ifrom_memory_pointer[address];
       }
-    break;            
+    break;   
 
+
+    case MEMORY_ZONE_MSX_VRAM:
+        if (MACHINE_IS_MSX) {
+                p=&msx_vram_memory[address];
+        }        
+    break;
+
+    case MEMORY_ZONE_MSX_ALL_MEM:
+        if (MACHINE_IS_MSX) {
+                p=&memoria_spectrum[address];
+        }        
+    break;
+
+
+    case MEMORY_ZONE_SVI_VRAM:
+        if (MACHINE_IS_SVI) {
+                p=&svi_vram_memory[address];
+        }        
+    break;
+
+    case MEMORY_ZONE_SVI_ALL_MEM:
+        if (MACHINE_IS_SVI) {
+                p=&memoria_spectrum[address];
+        }        
+    break;
+
+
+    case MEMORY_ZONE_COLECO_VRAM:
+        if (MACHINE_IS_COLECO) {
+                p=&coleco_vram_memory[address];
+        }        
+    break;
+
+    case MEMORY_ZONE_SG1000_VRAM:
+        if (MACHINE_IS_SG1000) {
+                p=&sg1000_vram_memory[address];
+        }        
+    break;    
 
   }
 
@@ -11767,7 +12508,7 @@ void machine_get_memory_zone_name(int zone, char *name)
     case 14:
         if (MACHINE_IS_TBBLUE) {
           		   //123456789012345
-		strcpy(name,"TBBlue sprites");          
+		strcpy(name,"TBBlue patterns");          
         }
     break;
 
@@ -11849,8 +12590,48 @@ void machine_get_memory_zone_name(int zone, char *name)
 		           //123456789012345
 		strcpy(name,"iFrom rom");
 	}
-    break;        
+    break;       
 
+
+    case MEMORY_ZONE_MSX_VRAM:
+        if (MACHINE_IS_MSX) {
+               strcpy(name,"MSX VRAM"); 
+        }
+    break;
+
+
+    case MEMORY_ZONE_MSX_ALL_MEM:
+        if (MACHINE_IS_MSX) {
+                          //123456789012345
+               strcpy(name,"MSX All Mem"); 
+        }
+    break;
+
+   case MEMORY_ZONE_SVI_VRAM:
+        if (MACHINE_IS_SVI) {
+               strcpy(name,"SVI VRAM"); 
+        }
+    break;
+
+
+    case MEMORY_ZONE_SVI_ALL_MEM:
+        if (MACHINE_IS_SVI) {
+                          //123456789012345
+               strcpy(name,"SVI All Mem"); 
+        }
+    break;    
+
+    case MEMORY_ZONE_COLECO_VRAM:
+        if (MACHINE_IS_COLECO) {
+               strcpy(name,"Coleco VRAM"); 
+        }
+    break;    
+
+    case MEMORY_ZONE_SG1000_VRAM:
+        if (MACHINE_IS_SG1000) {
+               strcpy(name,"SG1000 VRAM"); 
+        }
+    break;     
 
   }
 
@@ -16670,9 +17451,19 @@ int util_add_window_geometry(char *nombre,int x,int y,int ancho,int alto)
 
 }
 
-//Misma funcion que la anterior pero indicando solo nombre y puntero a ventana
-void util_add_window_geometry_compact(char *nombre,zxvision_window *ventana)
+//Misma funcion que la anterior pero indicando solo puntero a ventana
+//El nombre lo obtiene de la estructura de zxvision_window
+void util_add_window_geometry_compact(zxvision_window *ventana)
 {
+
+        char *nombre;
+
+        nombre=ventana->geometry_name;
+        if (nombre[0]==0) {
+                //printf ("Trying to save window geometry but name is blank\n");
+                return;
+        }
+
         util_add_window_geometry(nombre,ventana->x,ventana->y,ventana->visible_width,ventana->visible_height);        
 }
 
@@ -16770,7 +17561,7 @@ char *util_read_line(char *origen,char *destino,int size_orig,int max_size_dest,
 }
 
 //Retorna el codigo http o <0 si otros errores
-int util_download_file(char *hostname,char *url,char *archivo,int use_ssl)
+int util_download_file(char *hostname,char *url,char *archivo,int use_ssl,int estimated_maximum_size)
 {
   int http_code;
 	char *mem;
@@ -16779,7 +17570,10 @@ int util_download_file(char *hostname,char *url,char *archivo,int use_ssl)
 	int total_leidos;
 	int retorno;
         char redirect_url[NETWORK_MAX_URL];
-        retorno=zsock_http(hostname,url,&http_code,&mem,&total_leidos,&mem_after_headers,1,"",use_ssl,redirect_url);
+
+
+
+        retorno=zsock_http(hostname,url,&http_code,&mem,&total_leidos,&mem_after_headers,1,"",use_ssl,redirect_url,estimated_maximum_size);
 
         
         if (http_code==302 && redirect_url[0]!=0) {
@@ -16804,7 +17598,7 @@ int util_download_file(char *hostname,char *url,char *archivo,int use_ssl)
 
                 //El redirect sucede con las url a archive.org
 
-                retorno=zsock_http(nuevo_host,nueva_url,&http_code,&mem,&total_leidos,&mem_after_headers,1,"",use_ssl,redirect_url);
+                retorno=zsock_http(nuevo_host,nueva_url,&http_code,&mem,&total_leidos,&mem_after_headers,1,"",use_ssl,redirect_url,0);
 
 	}
 
@@ -16829,7 +17623,7 @@ int util_download_file(char *hostname,char *url,char *archivo,int use_ssl)
                 ptr_destino=fopen(archivo,"wb");
 
                 if (ptr_destino==NULL) {
-                        debug_printf (VERBOSE_ERR,"Error writing game file");
+                        debug_printf (VERBOSE_ERR,"Error writing output file");
                         return -1;
                 }
 
@@ -16845,12 +17639,11 @@ int util_download_file(char *hostname,char *url,char *archivo,int use_ssl)
         //Fin resultado http correcto
         else {	
                 if (retorno<0) {	
-                        //debug_printf(VERBOSE_ERR,"Error downloading game list. Return code: %d",http_code);
                         //printf ("Error: %d %s\n",retorno,z_sock_get_error(retorno));
                         return retorno;
                 }
                 else {
-                        debug_printf(VERBOSE_ERR,"Error downloading game list. Return code: %d",http_code);
+                        debug_printf(VERBOSE_ERR,"Error downloading file. Return code: %d",http_code);
                 }
         }	        
 
@@ -17009,4 +17802,335 @@ z80_byte get_memory_checksum_spectrum(z80_byte crc,z80_byte *origen,int longitud
         }
 
         return crc;
+}
+
+//Guardar valor de 16 bits en direccion de memoria 
+void util_store_value_little_endian(z80_byte *destination,z80_int value)
+{
+        destination[0]=value_16_to_8l(value);
+        destination[1]=value_16_to_8h(value);
+}
+
+
+//Recuperar valor de 16 bits de direccion de memoria 
+z80_int util_get_value_little_endian(z80_byte *origin)
+{
+        return value_8_to_16(origin[1],origin[0]);
+}
+
+
+
+void util_get_home_dir(char *homedir)
+{
+
+        //asumimos vacio
+        homedir[0]=0;
+
+  #ifndef MINGW
+        char *directorio_home;
+        directorio_home=getenv("HOME");
+        if ( directorio_home==NULL) {
+                  //printf("Unable to find $HOME environment variable to open configuration file\n");
+                return;
+        }
+
+        sprintf(homedir,"%s/",directorio_home);
+
+  #else
+        char *homedrive;
+        char *homepath;
+        homedrive=getenv("HOMEDRIVE");
+        homepath=getenv("HOMEPATH");
+
+        if (homedrive==NULL || homepath==NULL) {
+                //printf("Unable to find HOMEDRIVE or HOMEPATH environment variables to open configuration file\n");
+                  return;
+          }
+
+        sprintf(homedir,"%s\\%s\\",homedrive,homepath);
+
+  #endif
+
+
+}
+
+ #define UTIL_BMP_HEADER_SIZE (14+40)
+
+int util_bmp_get_file_size(int ancho,int alto)
+{
+        //File size
+        //cabecera + ancho*alto*3 (*3 porque es 24 bit de color)
+        int file_size=(ancho*alto*3)+UTIL_BMP_HEADER_SIZE;
+
+        return file_size;
+}
+
+//Asignar memoria para un archivo bmp de 24 bits y meter algunos valores en cabecera
+z80_byte *util_bmp_new(int ancho,int alto)
+{
+
+        //http://www.ece.ualberta.ca/~elliott/ee552/studentAppNotes/2003_w/misc/bmp_file_format/bmp_file_format.htm
+       
+
+        int memoria_necesaria=(ancho*alto*3)+UTIL_BMP_HEADER_SIZE;
+
+        z80_byte *puntero;
+
+        puntero=malloc(memoria_necesaria);
+
+        if (puntero==NULL) cpu_panic("Can not allocate memory for bmp file");
+
+        puntero[0]='B';
+        puntero[1]='M';
+
+        //File size
+        //cabecera + ancho*alto*3 (*3 porque es 24 bit de color)
+        int file_size=util_bmp_get_file_size(ancho,alto);
+        puntero[2]=file_size & 0xFF;
+        file_size >>=8;
+
+        puntero[3]=file_size & 0xFF;
+        file_size >>=8;
+
+        puntero[4]=file_size & 0xFF;
+        file_size >>=8;
+
+        puntero[5]=file_size & 0xFF;
+        file_size >>=8;                
+
+        //Unused
+        puntero[6]=puntero[7]=puntero[8]=puntero[9];
+
+        //Data offset
+        puntero[10]=value_16_to_8l(UTIL_BMP_HEADER_SIZE);
+        puntero[11]=value_16_to_8h(UTIL_BMP_HEADER_SIZE);
+        puntero[12]=puntero[13]=0;
+
+        //Size of info header = 40
+        puntero[14]=40;
+        puntero[15]=puntero[16]=puntero[17]=0;
+
+        //Ancho
+        puntero[18]=value_16_to_8l(ancho);
+        puntero[19]=value_16_to_8h(ancho);
+        puntero[20]=puntero[21]=0;
+
+        //Alto
+        puntero[22]=value_16_to_8l(alto);
+        puntero[23]=value_16_to_8h(alto);
+        puntero[24]=puntero[25]=0;    
+
+        //Planes = 1   
+        puntero[26]=1; 
+        puntero[27]=0;
+
+        //Bits per pixel -> 24 
+        puntero[28]=24; 
+        puntero[29]=0;
+
+        //Compression -> 0 no compression
+        puntero[30]=puntero[31]=puntero[32]=puntero[33]=0;
+
+        //Image size. If compression -> 0
+        puntero[34]=puntero[35]=puntero[36]=puntero[37]=0;
+        
+        //horizontal resolution: Pixels/meter. 2835. valor de referencia de otro bmp
+        puntero[38]=value_16_to_8l(2835);
+        puntero[39]=value_16_to_8h(2835);
+        puntero[40]=puntero[41]=0;        
+
+        
+        //vertical resolution: Pixels/meter
+        puntero[42]=value_16_to_8l(2835);
+        puntero[43]=value_16_to_8h(2835);
+        puntero[44]=puntero[45]=0;   
+
+        //Number of actually used colors. For a 8-bit / pixel bitmap this will be 100h or 256.
+        //-> 1 ^24
+        puntero[46]=puntero[47]=puntero[48]=0;        
+        puntero[49]=1;
+
+        //Number of important colors  0 = all
+        puntero[50]=puntero[51]=puntero[52]=puntero[53]=0;
+
+        return puntero;
+}
+
+void util_bmp_putpixel(z80_byte *puntero,int x,int y,int r,int g,int b)
+{
+        int ancho=value_8_to_16(puntero[19],puntero[18]);
+        int alto=value_8_to_16(puntero[23],puntero[22]);
+
+        //Se dibuja de abajo a arriba
+        int yfinal=(alto-1)-y;
+
+        int tamanyo_linea=ancho*3;
+        int offset_x=x*3;
+//TODO: determinados anchos de imagen parece que el offset de linea no siempre es este        
+        int offset=(yfinal*tamanyo_linea)+offset_x+UTIL_BMP_HEADER_SIZE;
+
+        //Each 3-byte triplet in the bitmap array represents the relative intensities of blue, green, and red, respectively, for a pixel.
+
+        puntero[offset++]=b;
+        puntero[offset++]=g;
+        puntero[offset++]=r;
+
+}
+
+
+
+
+
+void util_write_screen_bmp(char *archivo)
+{
+
+        enable_rainbow();
+
+        int ancho,alto;
+
+
+        ancho=screen_get_emulated_display_width_no_zoom_border_en();
+        alto=screen_get_emulated_display_height_no_zoom_border_en();         
+
+
+        FILE *ptr_scrfile;
+        ptr_scrfile=fopen(archivo,"wb");
+        if (!ptr_scrfile) {
+                debug_printf (VERBOSE_ERR,"Unable to open Screen file");
+        }
+                               
+        else {
+
+
+                z80_byte *puntero_bitmap;
+
+                puntero_bitmap=util_bmp_new(ancho,alto);
+				
+
+//pixeles...
+
+
+
+                //Derivado de vofile_send_frame
+
+
+                z80_int *original_buffer;
+
+                original_buffer=rainbow_buffer;
+
+
+                z80_int color_leido;
+
+                int r,g,b;
+
+                int x,y; 
+
+
+                for (y=0;y<alto;y++) {
+                        for (x=0;x<ancho;x++) {
+                                color_leido=*original_buffer;
+                                convertir_color_spectrum_paleta_to_rgb(color_leido,&r,&g,&b);
+
+                                util_bmp_putpixel(puntero_bitmap,x,y,r,g,b);
+
+                                original_buffer++;
+                        }
+                }
+
+
+
+                int file_size=util_bmp_get_file_size(ancho,alto);
+					
+                fwrite(puntero_bitmap,1,file_size,ptr_scrfile);
+		              
+
+
+
+                fclose(ptr_scrfile);
+
+                free(puntero_bitmap);
+        }
+
+
+        
+
+}
+
+//Cargar 256 colores de paleta de un archivo bmp (de memoria) en un indice de nuestra paleta interna
+void util_bmp_load_palette(z80_byte *mem,int indice_inicio_color)
+{
+
+		//Cargar la paleta bmp. A partir del offset 36h??
+/*
+ColorTable	4 * NumColors bytes	0036h	present only if Info.BitsPerPixel less than 8   
+colors should be ordered by importance
+ 		Red	1 byte	 	Red intensity
+Green	1 byte	 	Green intensity
+Blue	1 byte	 	Blue intensity
+reserved	1 byte	 	unused (=0)
+			
+*/
+
+        		int i;
+		int indice_paleta; //=0x36+4;
+
+		indice_paleta=122;  //obtenido mediante restar el inicio de los pixeles (1146) - 1024 (1024 es lo que ocupa la tabla de colores)
+		//Orden BGR0
+		for (i=0;i<256;i++) {
+			int red=mem[indice_paleta+2];
+			int green=mem[indice_paleta+1];
+			int blue=mem[indice_paleta];
+
+			int color=(red<<16) | (green<<8) | blue;
+
+					
+			screen_set_colour_normal(indice_inicio_color+i,color);
+
+			indice_paleta +=4;
+		}
+}
+
+
+
+void util_rotate_file(char *filename,int archivos)
+{
+
+	//Borrar el ultimo
+	char buffer_last_file[PATH_MAX];
+
+	sprintf(buffer_last_file,"%s.%d",filename,archivos);
+
+	debug_printf (VERBOSE_DEBUG,"Erasing oldest file %s",buffer_last_file);
+
+	util_delete(buffer_last_file);
+
+	//Y renombrar, el penultimo al ultimo, el antepenultimo al penultimo, etc
+	//con 10 archivos:
+	//ren file.9 file.10
+	//ren file.8 file.9
+	//ren file.7 file.8
+	//...
+	//ren file.1 file.2
+	//ren file file.1 esto a mano
+	int i;
+
+	for (i=archivos-1;i>=0;i--) {
+		char buffer_file_orig[PATH_MAX];
+		char buffer_file_dest[PATH_MAX];
+
+		//Caso especial ultimo (seria el .0)
+		if (i==0) {
+			strcpy(buffer_file_orig,filename);
+		}
+		else {
+			sprintf(buffer_file_orig,"%s.%d",filename,i);
+		}
+
+		sprintf(buffer_file_dest,"%s.%d",filename,i+1);
+
+		debug_printf (VERBOSE_DEBUG,"Renaming log file %s -> %s",buffer_file_orig,buffer_file_dest);
+		rename(buffer_file_orig,buffer_file_dest);
+	}
+
+
 }

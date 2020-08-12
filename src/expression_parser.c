@@ -117,6 +117,7 @@ token_parser_textos_indices tpti_funciones[]={
 
 	{TPI_F_PEEK,"PEEK("},
 	{TPI_F_PEEKW,"PEEKW("},
+	{TPI_F_IN,"IN("},
 	{TPI_F_NOT,"NOT("},
 
 	{TPI_F_ABS,"ABS("},
@@ -164,6 +165,10 @@ token_parser_textos_indices tpti_variables[]={
     {TPI_V_SEG1,"SEG1"},
     {TPI_V_SEG2,"SEG2"},
     {TPI_V_SEG3,"SEG3"},
+    {TPI_V_SEG4,"SEG4"},
+    {TPI_V_SEG5,"SEG5"},
+    {TPI_V_SEG6,"SEG6"},
+    {TPI_V_SEG7,"SEG7"},
 
     {TPI_V_OPCODE1,"OPCODE1"},
     {TPI_V_OPCODE2,"OPCODE2"},
@@ -1156,19 +1161,39 @@ int exp_par_calculate_numvarreg(token_parser *token)
     //bancos memoria Z88
     case TPI_V_SEG0:
         if (MACHINE_IS_Z88) return blink_mapped_memory_banks[0];
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[0];
     break;
 
     case TPI_V_SEG1:
         if (MACHINE_IS_Z88) return blink_mapped_memory_banks[1];
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[1];
     break;
 
     case TPI_V_SEG2:
         if (MACHINE_IS_Z88) return blink_mapped_memory_banks[2];
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[2];
     break;
 
     case TPI_V_SEG3:
         if (MACHINE_IS_Z88) return blink_mapped_memory_banks[3];
-    break;            
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[3];
+    break;          
+
+    case TPI_V_SEG4:
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[4];
+    break;           
+
+    case TPI_V_SEG5:
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[5];
+    break;           
+
+    case TPI_V_SEG6:
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[6];
+    break;           
+
+    case TPI_V_SEG7:
+        if (MACHINE_IS_TBBLUE) return debug_paginas_memoria_mapeadas[7];
+    break;           
 
 
     case TPI_V_ROM:
@@ -1554,6 +1579,48 @@ int exp_par_calculate_funcion(int valor,enum token_parser_tipo tipo,enum token_p
 
                     case TPI_F_PEEKW:
         				return peek_byte_z80_moto(valor)+256*peek_byte_z80_moto(valor+1);
+                    break;
+                    
+                    case TPI_F_IN:
+                    if (MACHINE_IS_SPECTRUM) {
+                        return lee_puerto_spectrum_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+                    //zx80,81 no conviene pues la lectura de puerto genera vsync
+
+
+                    else if (MACHINE_IS_Z88) {
+                        return lee_puerto_z88_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+
+                    else if (MACHINE_IS_ACE) {
+                        return lee_puerto_ace_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+
+                    else if (MACHINE_IS_CPC) {
+                        return lee_puerto_cpc_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+
+                    else if (MACHINE_IS_SAM) {
+                        return lee_puerto_sam_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }                                                            
+
+                    else if (MACHINE_IS_MSX) {
+                        return lee_puerto_msx1_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+
+                    else if (MACHINE_IS_COLECO) {
+                        return lee_puerto_coleco_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+
+                    else if (MACHINE_IS_SG1000) {
+                        return lee_puerto_sg1000_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }
+
+                    else if (MACHINE_IS_SVI) {
+                        return lee_puerto_svi_no_time(value_16_to_8h(valor),value_16_to_8l(valor));
+                    }                                                            
+
+                    else return 255;
                     break;
 
 

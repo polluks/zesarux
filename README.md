@@ -28,6 +28,10 @@ And also:
 * TBBlue/ZX Spectrum Next
 * Jupiter Ace
 * Amstrad CPC 464, CPC 4128
+* MSX1 
+* Spectravideo 318/328
+* Colecovision
+* Sega SG1000
 
 ZEsarUX source code and binaries are distributed under GNU GPL license. 
 ZEsarUX also includes a folder, "my_soft", which has some programs and data made by me. The entire folder is also covered by the GNU GPL license.
@@ -50,6 +54,7 @@ Available versions for download here:
 * Source code
 * Binary compiled versions:
 * GNU/Linux 32/64 Bits
+* FreeBSD 64 Bits
 * Mac OS X
 * Windows
 * Raspberry pi (raspbian)
@@ -84,7 +89,7 @@ Thanks!
 
 __FEATURES__
 
-* Runs on any Unix system and Windows: tested on GNU/Linux x86, GNU/Linux x86_64, GNU/Linux Raspbian, GNU/Linux RetroPie, Mac OS X, Windows native, Windows + Cygwin
+* Runs on any Unix system and Windows: tested on GNU/Linux x86, GNU/Linux x86_64, GNU/Linux Raspbian, GNU/Linux RetroPie, FreeBSD x86_64, Haiku, Mac OS X, Windows native, Windows + Cygwin
 
 * Emulates:
 * Science of Cambridge MK14
@@ -105,6 +110,10 @@ __FEATURES__
 * TBBlue/ZX Spectrum Next
 * Jupiter Ace
 * Amstrad CPC 464, CPC 4128
+* MSX1 
+* Spectravideo 318/328
+* Colecovision
+* Sega SG1000
 
 * Is the only emulator for machines: Chloe 140/280, Prism and Chrome
 
@@ -156,21 +165,21 @@ __FEATURES__
 
 * Supports real tape loading of file formats: RWA, SMP, WAV, TZX, PZX, CDT, TAP, P, O. It handles loading of turbo load tapes or any type of tape loading for standard/non standard loading routines
 
-* Handles binary tape format files (TAP, TZX, O, P, CDT) on standard BASIC ROM routines for ZX Spectrum, ZX80, ZX81, Jupiter Ace
+* Handles binary tape format files (TAP, TZX, O, P, CDT, CAS) on standard BASIC ROM routines for ZX Spectrum, ZX80, ZX81, Amstrad CPC, Jupiter Ace, MSX, Spectravideo
 
 * Handles real audio loading (RWA, SMP, WAV) on standard BASIC ROM routines for ZX Spectrum, ZX80, ZX81, Amstrad CPC, Jupiter Ace
 
 * Simulates real tape loading on standard BASIC ROM routines for ZX Spectrum, ZX80, ZX81
 
-* Handles snapshot format: ZSF, ZX, Z80, SP, SPG, NEX, SNA, P, O, Z81, ACE
+* Handles snapshot formats: ZSF, ZX, Z80, SP, SPG, NEX, SNA, P, O, Z81, ACE
+
+* Handles cartridge formats: DCK, ROM, COL, SG
 
 * Handles RZX playback 
 
 * Emulates Multiface One, 128 and Three
 
-* Emulates Datagear/MB02 DMA
-
-* Handles DCK Timex dock cartridges
+* Emulates Datagear/MB02 DMA, ZX-Uno DMA
 
 * Emulates +3 Disk
 
@@ -194,9 +203,11 @@ __FEATURES__
 
 * Handles RAM, EPROM, Intel Flash and Hybrid (RAM+EPROM) cards on Z88
 
-* Handles compressed formats zip, tar, rar, gz through external utilities
+* Handles compressed formats zip (with internal decompressor), and tar, rar, gz through external utilities
 
-* Supports AY Chip, Turbosound (2 AY Channels), 3 AY Channels, different DAC: Specdrum, Covox, ACB/ABC/BAC Stereo 
+* Supports AY Audio Chip, Turbosound (2 AY Channels), 3 AY Channels, MIDI channels, different DAC: Specdrum, Covox, ACB/ABC/BAC Stereo 
+
+* Supports SN76489AN Audio Chip
 
 * Real time playback from AY Chip sound to external MIDI device 
 

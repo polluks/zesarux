@@ -39,6 +39,11 @@
 #endif
 
 
+#if defined(__APPLE__)
+	//Para _NSGetExecutablePath
+	#include <mach-o/dyld.h>
+#endif
+
 
 #include "cpu.h"
 #include "scrnull.h"
@@ -113,6 +118,12 @@
 #include "zeng.h"
 #include "hilow.h"
 #include "ds1307.h"
+#include "msx.h"
+#include "coleco.h"
+#include "sg1000.h"
+#include "sn76489an.h"
+#include "vdp_9918a.h"
+#include "svi.h"
 
 #ifdef COMPILE_STDOUT
 #include "scrstdout.h"
@@ -183,9 +194,6 @@
 #include "audiocoreaudio.h"
 #endif
 
-#ifdef USE_REALTIME
-#include <sched.h>
-#endif
 
 #include "audionull.h"
 
@@ -464,10 +472,17 @@ z80_byte Z80_FLAGS_SHADOW;
 //MEMPTR. Solo se usara si se ha activado en el configure
 z80_int memptr;
 
+//Solo se usa si se habilita EMULATE_SCF_CCF_UNDOC_FLAGS
+z80_byte scf_ccf_undoc_flags_before;
+int scf_ccf_undoc_flags_after_changed;
+
 
 //Emulacion de refresco de memoria.
 int machine_emulate_memory_refresh=0;
 int machine_emulate_memory_refresh_counter=0;
+
+//Optimizacion de velocidad de LDIR,LDDR:
+z80_bit cpu_ldir_lddr_hack_optimized={0};
 
 //A 0 si interrupts disabled
 //A 1 si interrupts enabled
@@ -1052,6 +1067,24 @@ void reset_cpu(void)
 
 	}
 
+	if (MACHINE_IS_MSX) {
+		msx_reset();
+	}
+
+	if (MACHINE_IS_SVI) {
+		svi_reset();
+	}	
+
+	if (MACHINE_IS_COLECO) {
+		coleco_reset();
+	}	
+
+	if (MACHINE_IS_SG1000) {
+		sg1000_reset();
+	}	
+
+	vdp_9918a_reset();	
+
 	t_estados=0;
 	t_scanline=0;
 	t_scanline_draw=0;
@@ -1062,6 +1095,8 @@ void reset_cpu(void)
         }
 
 	init_chip_ay();
+
+	init_chip_sn();
 
 #ifdef EMULATE_CPU_STATS
 util_stats_init();
@@ -1244,6 +1279,12 @@ char *string_machines_list_description=
 
 							" CPC464   Amstrad CPC 464\n"
 							" CPC4128  Amstrad CPC 4128\n"
+							
+							" MSX1     MSX1\n"
+							" Coleco   Colecovision\n"
+							" SG1000   Sega SG1000\n"
+							" SVI318   Spectravideo SVI 318\n"
+							" SVI328   Spectravideo SVI 328\n"
 							;
 
 
@@ -1464,7 +1505,10 @@ printf (
 
 		"--cpuspeed n               Set CPU speed in percentage\n"
 		"--denyturbozxunoboot       Deny setting turbo mode on ZX-Uno boot\n"
-		"--denyturbotbbluerom       Deny setting turbo mode on TBBlue ROM\n"
+
+		"--denyturbotbbluerom       Limit setting turbo mode on TBBlue ROM\n"
+		"--tbblue-max-turbo-rom n   Max allowed turbo speed mode on TBBlue ROM when enabling --denyturbotbbluerom"
+
 		"--tbblue-fast-boot-mode    Boots tbblue directly to a 48 rom but with all the Next features enabled (except divmmc)\n"
 		//no uso esto de momento "--tbblue-123b-port n        Sets the initial value for port 123b on hard reset, for tbblue-fast-boot-mode\n"
 		"--random-r-register        Generate random value for R register on every cold start, instead of the normal 0 value. Useful to avoid same R register in the start of games, when they use that register as a random value\n"
@@ -1523,8 +1567,10 @@ printf (
 		"--ayplayer-cpc             Set AY Player to CPC mode (default: Spectrum)\n"
 		"--enable-midi              Enable midi output\n"
 		"--midi-client n            Set midi client value to n. Needed only on Linux with Alsa audio driver\n"
-		"--midi-port n              Set midi port valur to n. Needed on Windows and Linux with Alsa audio driver\n"
+		"--midi-port n              Set midi port value to n. Needed on Windows and Linux with Alsa audio driver\n"
+		"--midi-raw-device s        Set midi raw device to s. Needed on Linux with Alsa audio driver\n"
 		"--midi-allow-tone-noise    Allow tone+noise channels on midi\n"
+		"--midi-no-raw-mode         Do not use midi in raw mode. Raw mode is required on Linux to emulate AY midi registers\n"
 
 
 		"\n"
@@ -1591,6 +1637,9 @@ printf (
 		"--realvideo                Enable real video display - for Spectrum (rainbow and other advanced effects) and ZX80/81 (non standard & hi-res modes)\n"
 		"--no-detect-realvideo      Disable real video autodetection\n"
 
+		"--tbblue-legacy-hicolor    Allow legacy hi-color effects on pixel/attribute display zone\n"
+		"--tbblue-legacy-border     Allow legacy border effects on tbblue machine\n"
+
 		//"--tsconf-fast-render       Enables fast render of Tiles and Sprites for TSConf. Uses less host cpu but it's less realistic: doesn't do scanline render but full frame render\n"
 
 		"--snoweffect               Enable snow effect support for Spectrum\n"
@@ -1611,6 +1660,11 @@ printf (
 		"--videofastblack           Emulate black screen on fast mode on ZX80/ZX81\n"
 		"--no-ocr-alternatechars    Disable looking for an alternate character set other than the ROM default on OCR functions\n"
 		"--scr file                 Load Screen File at startup\n"
+	    "--arttextthresold n        Pixel threshold for artistic emulation for curses & stdout & simpletext (1..16. 4=normal)\n"
+	    "--disablearttext           Disable artistic emulation for curses & stdout & simpletext\n"
+		"--allpixeltotext           Enable all pixel to text mode\n"
+		"--allpixeltotext-scale n   All pixel to text mode scale\n"
+		"--allpixeltotext-invert    All pixel to text mode invert mode\n"		
 
 
 
@@ -1632,8 +1686,7 @@ printf (
                 "--aaslow                   Use slow rendering on aalib\n"
 #endif
 
-	    "--arttextthresold n        Pixel threshold for artistic emulation for curses & stdout & simpletext (1..16. 4=normal)\n"
-	    "--disablearttext           Disable artistic emulation for curses & stdout & simpletext\n"
+
 
 #ifdef COMPILE_CURSESW
 		"--curses-ext-utf           Use extended utf characters to have 64x48 display, only on Spectrum and curses drivers\n"
@@ -1705,15 +1758,19 @@ printf (
 		//"--disablebw-no-multitask   Disable changing to black & white colours on the emulator machine when menu open and multitask is off\n"
 		"--nosplash                 Disable all splash texts\n"
 #ifndef MINGW
-		"--cpu-usage                Show host CPU usage on footer\n"
+		"--no-cpu-usage             Do not show host CPU usage on footer\n"
 #endif
 
-	
+		"--no-cpu-temp              Do not show host CPU temperature on footer\n"
+		"--no-fps                   Do not show FPS on footer\n"
+
+
 
 		"--hide-menu-percentage-bar  Hides vertical percentaje bar on the right of text windows and file selector\n"
 		"--hide-menu-minimize-button Hides minimize button on the title window\n"
 		"--hide-menu-close-button    Hides close button on the title window\n"
 		"--invert-menu-mouse-scroll  Inverts mouse scroll movement\n"
+		"--allow-background-windows  Allow puttin windows in background\n"
 		);
 
 	printf (
@@ -1757,6 +1814,7 @@ printf (
 		"\n"
 		"--hide-dirs                Do not show directories on file selector menus\n"
 		"--limitopenmenu            Limit the action to open menu (F5 by default, joystick button). To open it, you must press the key 3 times in one second\n"
+		"--setmachinebyname         Select machine by name instead of manufacturer\n"
 		"--disablemenu              Disable menu\n"
 		"--disablemenuandexit       Disable menu. Any event that opens the menu will exit the emulator\n"
 		"--disablemenufileutils     Disable File Utilities menu\n"
@@ -1884,9 +1942,12 @@ printf (
 
 		"--enable-8bit-ide          Enable 8-bit simple IDE emulation. Requires --enable-ide\n"
 
+		"--diviface-ram-size n      Sets divide/divmmc ram size in kb. Allowed values: 32, 64, 128, 256 or 512\n"
+
 
 		"--enable-esxdos-handler    Enable ESXDOS traps handler. Requires divmmc or divide paging emulation\n"
 		"--esxdos-root-dir p        Set ESXDOS root directory for traps handler. Uses current directory by default.\n"
+                "--esxdos-local-dir p       Set ESXDOS local directory for traps handler. This is the relative directory used inside esxdos.\n"
 
 
 		"--enable-zxpand            Enable ZXpand emulation\n"
@@ -2064,7 +2125,15 @@ printf (
 		"--no-show-changelog        Do not show changelog when updating version\n"
 		"--disablebetawarning text  Do not pause beta warning message on boot for version named as that parameter text\n"
 		"--windowgeometry s x y w h Set window geometry. Parameters: window name (s), x coord, y coord, width (w), height (h)\n"
+		"--enable-restore-windows   Allow restore windows on start\n"
+        "--restorewindow s          Restore window s on start\n"
+		
+
 		"--clear-all-windowgeometry Clear all windows geometry thay may be loaded from the configuration file\n"
+
+
+
+		"--tbblue-autoconfigure-sd-already-asked     Do not ask to autoconfigure tbblue initial SD image\n"
 		
 		//Esto no hace falta que lo vea un usuario, solo lo uso yo para probar partes del emulador 
 		//"--codetests                Run develoment code tests\n"
@@ -2385,10 +2454,7 @@ void random_ram_inves(z80_byte *puntero,int longitud)
 
 }
 
-struct s_machine_names {
-	char nombre_maquina[40];  //40 mas que suficiente
-	int id;
-};
+
 
 struct s_machine_names machine_names[]={
 
@@ -2424,6 +2490,11 @@ struct s_machine_names machine_names[]={
                                             {"ZX Spectrum +3 (ROM v4.1)",		MACHINE_ID_SPECTRUM_P3_41},
                                             {"ZX Spectrum +3 (Spanish)",		MACHINE_ID_SPECTRUM_P3_SPA},
 
+{"MSX1",MACHINE_ID_MSX1},
+{"ColecoVision",MACHINE_ID_COLECO},
+{"SG1000",MACHINE_ID_SG1000},
+{"Spectravideo 318",MACHINE_ID_SVI_318},
+{"Spectravideo 328",MACHINE_ID_SVI_328},
 
                                             {"ZX80",  				120},
                                             {"ZX81",  				121},
@@ -2681,10 +2752,10 @@ void malloc_mem_machine(void) {
 
         else if (MACHINE_IS_TBBLUE) {
 
-		//2048 KB RAM + 8 KB ROM (8 kb repetido dos veces)
-                malloc_machine( (2048+8*2)*1024);
+		//2048 KB RAM + 16 KB FPGA ROM (8 kb repetido dos veces)
+                malloc_machine( TBBLUE_TOTAL_MEMORY_USED*1024);
 
-                random_ram(memoria_spectrum,(2048+8*2)*1024);
+                random_ram(memoria_spectrum,TBBLUE_TOTAL_MEMORY_USED*1024);
 
 
                 tbblue_init_memory_tables();
@@ -2763,6 +2834,64 @@ void malloc_mem_machine(void) {
 
 
         }
+        
+        else if (MACHINE_IS_MSX1) {
+                //total 64kb * 4
+                malloc_machine(65536*4);
+                random_ram(memoria_spectrum+32768,32768);
+
+
+				//y 16kb para vram
+				msx_alloc_vram_memory();
+
+
+				msx_init_memory_tables();
+
+        }
+
+
+        else if (MACHINE_IS_SVI) {
+			//Total:  5 RAMS de 32 kb, 3 ROMS de 32 kb -> 5*32 + 3*32 = 160 + 96 = 256
+                
+                malloc_machine(256*1024);
+                random_ram(memoria_spectrum,256*1024);
+
+
+				//y 16kb para vram
+				svi_alloc_vram_memory();
+
+
+				svi_init_memory_tables();
+
+        }		
+
+        else if (MACHINE_IS_COLECO) {
+                //total 64kb 
+                malloc_machine(65536);
+                random_ram(memoria_spectrum+32768,32768);
+
+
+				//y 16kb para vram
+				coleco_alloc_vram_memory();
+
+
+				coleco_init_memory_tables();
+
+        }		
+
+        else if (MACHINE_IS_SG1000) {
+                //total 64kb 
+                malloc_machine(65536);
+                random_ram(memoria_spectrum,65536);
+
+
+				//y 16kb para vram
+				sg1000_alloc_vram_memory();
+
+
+				sg1000_init_memory_tables();
+
+        }			
 
 
 	else if (MACHINE_IS_Z88) {
@@ -2832,6 +2961,12 @@ void set_machine_params(void)
 27=Amstrad +3 - Espa�ol
 
 28-29 Reservado (Spectrum)
+100=colecovision
+101=sega sg1000
+102=Spectravideo 318
+103=Spectravideo 328
+110-119 msx:
+110 msx1
 120=zx80 (old 20)
 121=zx81 (old 21)
 122=jupiter ace (old 22)
@@ -2851,6 +2986,7 @@ void set_machine_params(void)
 
 		//defaults
 		ay_chip_present.v=0;
+		sn_chip_present.v=0;
 
 		if (!MACHINE_IS_Z88) {
 			//timer_sleep_machine=original_timer_sleep_machine=20000;
@@ -2931,6 +3067,22 @@ void set_machine_params(void)
 			cpu_core_loop_active=CPU_CORE_MK14;
 		}
 
+		else if (MACHINE_IS_MSX) {
+			cpu_core_loop_active=CPU_CORE_MSX;
+		}		
+
+		else if (MACHINE_IS_SVI) {
+			cpu_core_loop_active=CPU_CORE_SVI;
+		}			
+
+		else if (MACHINE_IS_COLECO) {
+			cpu_core_loop_active=CPU_CORE_COLECO;
+		}	
+
+		else if (MACHINE_IS_SG1000) {
+			cpu_core_loop_active=CPU_CORE_SG1000;
+		}			
+
 
 		else {
 			cpu_core_loop_active=CPU_CORE_Z88;
@@ -2994,7 +3146,11 @@ void set_machine_params(void)
 		realtape_volumen=0;
 
 
-
+		//Resetear a zona memoria por defecto. Evita cuelgues al intentar usar una zona de memoria que ya no esta disponible,
+		//ejemplo: iniciar maquina msx. abrir view sprites->activar hardware. F5 y cambiar a spectravideo. F5. Floating point exception.
+		//menu_debug_set_memory_zone_mapped();
+		//En principio esto ya no hace falta, desde menu_debug_set_memory_zone_attr, menu_debug_get_mapped_byte y menu_debug_write_mapped_byte
+		//ya se está conmutando correctamente a memory mapped cuando la zona anterior ya no está disponible
 
 		screen_set_parameters_slow_machines();
 
@@ -3016,6 +3172,11 @@ void set_machine_params(void)
 
 		if (MACHINE_IS_TBBLUE) datagear_dma_enable();
 		//else datagear_dma_disable();
+
+		//Pentagon no tiene modo Timex
+		if (MACHINE_IS_PENTAGON) {
+			if (timex_video_emulation.v) disable_timex_video();
+		}
 
 		//Quitar mensajes de footer establecidos con autoselectoptions.c
 		//Desactivado. Esto provoca:
@@ -3280,6 +3441,59 @@ You don't need timings for H/V sync =)
 
                 }
 
+		else if (MACHINE_IS_MSX) {
+			contend_read=contend_read_msx1;
+			contend_read_no_mreq=contend_read_no_mreq_msx1;
+			contend_write_no_mreq=contend_write_no_mreq_msx1;
+
+			ula_contend_port_early=ula_contend_port_early_msx1;
+			ula_contend_port_late=ula_contend_port_late_msx1;
+
+			
+			// 3579545 / 312 / 50
+			screen_testados_linea=229;
+
+		}		
+
+		else if (MACHINE_IS_SVI) {
+			contend_read=contend_read_svi;
+			contend_read_no_mreq=contend_read_no_mreq_svi;
+			contend_write_no_mreq=contend_write_no_mreq_svi;
+
+			ula_contend_port_early=ula_contend_port_early_svi;
+			ula_contend_port_late=ula_contend_port_late_svi;
+
+
+			screen_testados_linea=228;
+
+		}			
+
+		else if (MACHINE_IS_COLECO) {
+			contend_read=contend_read_coleco;
+			contend_read_no_mreq=contend_read_no_mreq_coleco;
+			contend_write_no_mreq=contend_write_no_mreq_coleco;
+
+			ula_contend_port_early=ula_contend_port_early_coleco;
+			ula_contend_port_late=ula_contend_port_late_coleco;
+
+			
+			screen_testados_linea=215;
+
+		}		
+
+		else if (MACHINE_IS_SG1000) {
+			contend_read=contend_read_sg1000;
+			contend_read_no_mreq=contend_read_no_mreq_sg1000;
+			contend_write_no_mreq=contend_write_no_mreq_sg1000;
+
+			ula_contend_port_early=ula_contend_port_early_sg1000;
+			ula_contend_port_late=ula_contend_port_late_sg1000;
+
+			
+			screen_testados_linea=228;
+
+		}						
+
 		else if (MACHINE_IS_SAM) {
 			contend_read=contend_read_sam;
                         contend_read_no_mreq=contend_read_no_mreq_sam;
@@ -3509,7 +3723,12 @@ You don't need timings for H/V sync =)
 				//Solo forzar real video una vez al entrar aquí. Para poder dejar real video desactivado si el usuario lo quiere,
 				//pues aqui se entra siempre al cambiar velocidad cpu (y eso pasa en la rom cada vez que te mueves por el menu del 128k por ejemplo)
 				//TODO: siempre que el usuario entre al emulador se activara la primera vez
-				if (!tbblue_already_autoenabled_rainbow) enable_rainbow();
+				if (!tbblue_already_autoenabled_rainbow) {
+					enable_rainbow();
+					//lo mismo para timex video
+					enable_timex_video();
+				}
+
 				tbblue_already_autoenabled_rainbow=1;
 
 				multiface_type=MULTIFACE_TYPE_THREE;
@@ -3574,7 +3793,55 @@ You don't need timings for H/V sync =)
 
 								break;
 
+		case MACHINE_ID_COLECO:
+                poke_byte=poke_byte_coleco;
+                peek_byte=peek_byte_coleco;
+				peek_byte_no_time=peek_byte_no_time_coleco;
+				poke_byte_no_time=poke_byte_no_time_coleco;
+                lee_puerto=lee_puerto_coleco;
+				out_port=out_port_coleco;
+				fetch_opcode=fetch_opcode_coleco;
+				sn_chip_present.v=1;
+        break;
 
+		case MACHINE_ID_SG1000:
+                poke_byte=poke_byte_sg1000;
+                peek_byte=peek_byte_sg1000;
+				peek_byte_no_time=peek_byte_no_time_sg1000;
+				poke_byte_no_time=poke_byte_no_time_sg1000;
+                lee_puerto=lee_puerto_sg1000;
+				out_port=out_port_sg1000;
+				fetch_opcode=fetch_opcode_sg1000;
+				sn_chip_present.v=1;
+        break;
+
+		case MACHINE_ID_MSX1:
+                poke_byte=poke_byte_msx1;
+                peek_byte=peek_byte_msx1;
+				peek_byte_no_time=peek_byte_no_time_msx1;
+				poke_byte_no_time=poke_byte_no_time_msx1;
+                lee_puerto=lee_puerto_msx1;
+				out_port=out_port_msx1;
+				fetch_opcode=fetch_opcode_msx;
+				ay_chip_present.v=1;
+				ay_chip_selected=0;
+				total_ay_chips=1;
+        break;
+
+
+		case MACHINE_ID_SVI_318:
+		case MACHINE_ID_SVI_328:
+                poke_byte=poke_byte_svi;
+                peek_byte=peek_byte_svi;
+				peek_byte_no_time=peek_byte_no_time_svi;
+				poke_byte_no_time=poke_byte_no_time_svi;
+                lee_puerto=lee_puerto_svi;
+				out_port=out_port_svi;
+				fetch_opcode=fetch_opcode_svi;
+				ay_chip_present.v=1;
+				ay_chip_selected=0;
+				total_ay_chips=1;
+        break;
 
 
 		case 120:
@@ -3747,6 +4014,8 @@ You don't need timings for H/V sync =)
 		out_port=out_port_legacy_ql;
 		fetch_opcode=fetch_opcode_legacy_ql;
 
+		ql_readbyte_no_ports_function=ql_readbyte_no_ports;
+
 
 							//Hagamoslo mas lento
 								screen_testados_linea=80;
@@ -3817,13 +4086,28 @@ void post_set_mach_reopen_screen(void)
 			//scr_init_pantalla();
 }
 
+//Reabrir ventana en caso de que maquina seleccionada sea diferente a la anterior
+void post_set_machine_no_rom_load_reopen_window(void)
+{
+	set_menu_gui_zoom();
+
+	if (last_machine_type!=255 && last_machine_type!=current_machine_type) {
+		debug_printf (VERBOSE_INFO,"Reopening window so current machine is different and may have different window size");
+		//printf ("Reopening window so current machine is different and may have different window size\n");
+		post_set_mach_reopen_screen();
+		return;		
+	}
+}
+
 /*
+Vieja funcion
 Reabrir ventana en caso de que maquina seleccionada tenga tamanyo diferente que la anterior
 TODO: Quiza se podria simplificar esto, se empezó con Z88 a spectrum y se han ido agregando,
 se exponen todos los casos de maquinas con diferentes tamanyos de ventana,
 pero quiza simplemente habria que ver que el tamanyo anterior fuera diferente al actual y entonces reabrir ventana
+O que la maquina actual es diferente de la anterior
 */
-void post_set_machine_no_rom_load_reopen_window(void)
+void old_post_set_machine_no_rom_load_reopen_window(void)
 {
 
 	set_menu_gui_zoom();
@@ -4124,6 +4408,23 @@ void rom_load(char *romfilename)
                 romfilename="pentagon.rom";
                 break;
 
+                case MACHINE_ID_COLECO:
+                romfilename="coleco.rom";
+                break;	
+
+                case MACHINE_ID_SG1000:
+                romfilename="sg1000.rom"; 
+                break;							
+                
+                case MACHINE_ID_MSX1:
+                romfilename="msx.rom";
+                break;
+
+                case MACHINE_ID_SVI_318:
+				case MACHINE_ID_SVI_328:
+                romfilename="svi.rom";
+                break;				
+
 								case MACHINE_ID_CHROME:
 								romfilename="chrome.rom";
 								break;
@@ -4200,8 +4501,12 @@ void rom_load(char *romfilename)
 		open_sharedfile(romfilename,&ptr_romfile);
                 if (!ptr_romfile)
                 {
-                        debug_printf(VERBOSE_ERR,"Unable to open rom file %s",romfilename);
-			cpu_panic("Unable to open rom file");
+                    debug_printf(VERBOSE_ERR,"Unable to open rom file %s",romfilename);
+
+					//No hacemos mas un panic por esto. Ayuda a debugar posibles problemas con el path de inicio
+					//cpu_panic("Unable to open rom file");
+
+					return;
                 }
 
 		//Caso Inves. ROM esta en el final de la memoria asignada
@@ -4366,6 +4671,37 @@ Total 20 pages=320 Kb
 
                 }
 
+                else if (MACHINE_IS_COLECO) {
+			//coleco 8 kb rom
+                        	leidos=fread(memoria_spectrum,1,8192,ptr_romfile);
+				if (leidos!=8192) {
+				 	cpu_panic("Error loading ROM");
+				}
+		}				
+                
+                else if (MACHINE_IS_SG1000) {
+					//no tiene rom. No cargamos nada, aunque mas arriba intenta siempre abrir un archivo de rom,
+					//es por eso que es necesario que exista el archivo de rom, aunque no se cargue ni se use para nada
+			
+		}	
+
+                else if (MACHINE_IS_MSX1) {
+			//msx 32 kb rom
+                        	leidos=fread(memoria_spectrum,1,32768,ptr_romfile);
+				if (leidos!=32768) {
+				 	cpu_panic("Error loading ROM");
+				}
+		}
+
+
+                else if (MACHINE_IS_SVI) {
+			//svi 32 kb rom
+                        	leidos=fread(memoria_spectrum,1,32768,ptr_romfile);
+				if (leidos!=32768) {
+				 	cpu_panic("Error loading ROM");
+				}
+		}
+
 
 		else if (MACHINE_IS_ZX80) {
 			//ZX80
@@ -4493,7 +4829,7 @@ void segint_signal_handler(int sig)
 #endif
 
 
-	end_emulator();
+	end_emulator_saveornot_config(0);
 
 
 }
@@ -4516,7 +4852,7 @@ void segterm_signal_handler(int sig)
 #endif
 
 
-        end_emulator();
+        end_emulator_saveornot_config(0);
 
 
 }
@@ -4807,6 +5143,9 @@ char *command_line_load_binary_file=NULL;
 int command_line_load_binary_address;
 int command_line_load_binary_length;
 
+char *command_line_esxdos_local_dir_path;
+z80_bit command_line_esxdos_local_dir={0};
+
 int command_line_chardetect_printchar_enabled=-1;
 
 
@@ -5016,7 +5355,7 @@ int parse_cmdline_options(void) {
                         else if (!strcmp(argv[puntero_parametro],"--cpuspeed")) {
                                 siguiente_parametro_argumento();
                                 porcentaje_velocidad_emulador=atoi(argv[puntero_parametro]);
-                                if (porcentaje_velocidad_emulador<10 || porcentaje_velocidad_emulador>1000) {
+                                if (porcentaje_velocidad_emulador<1 || porcentaje_velocidad_emulador>9999) {
                                         printf ("Invalid CPU percentage\n");
                                         exit(1);
                                 }
@@ -5028,7 +5367,19 @@ int parse_cmdline_options(void) {
 
 			else if (!strcmp(argv[puntero_parametro],"--denyturbotbbluerom")) {
 					tbblue_deny_turbo_rom.v=1;
-			}			
+			}		
+
+			else if (!strcmp(argv[puntero_parametro],"--tbblue-max-turbo-rom")) {
+				
+				siguiente_parametro_argumento();
+				int valor=parse_string_to_number(argv[puntero_parametro]);
+
+				if (valor<1 || valor>8) {
+						printf ("Invalid value for tbblue-max-turbo-rom\n");
+						exit(1);
+				}
+				tbblue_deny_turbo_rom_max_allowed=valor;					
+			}					
 
 			else if (!strcmp(argv[puntero_parametro],"--tbblue-fast-boot-mode")) {
 				tbblue_fast_boot_mode.v=1;
@@ -5341,6 +5692,10 @@ int parse_cmdline_options(void) {
 				menu_limit_menu_open.v=1;
 			}
 
+			else if (!strcmp(argv[puntero_parametro],"--setmachinebyname")) {
+				setting_machine_selection_by_name.v=1;
+			}			
+
 			else if (!strcmp(argv[puntero_parametro],"--hide-dirs")) {
 				menu_filesel_hide_dirs.v=1;
 			}
@@ -5417,6 +5772,25 @@ int parse_cmdline_options(void) {
 			else if (!strcmp(argv[puntero_parametro],"--no-ocr-alternatechars")) {
 				ocr_settings_not_look_23606.v=1;
 			}
+
+			else if (!strcmp(argv[puntero_parametro],"--allpixeltotext")) {
+				screen_text_all_refresh_pixel.v=1;
+			}
+
+			else if (!strcmp(argv[puntero_parametro],"--allpixeltotext-scale")) {
+					siguiente_parametro_argumento();
+					int valor=parse_string_to_number(argv[puntero_parametro]);
+					if (valor<2 || valor>99) {
+									printf ("Invalid --allpixeltotext-scale value\n");
+									exit(1);
+							}
+					screen_text_all_refresh_pixel_scale=valor;
+			}
+
+
+			else if (!strcmp(argv[puntero_parametro],"--allpixeltotext-invert")) {
+				screen_text_all_refresh_pixel_invert.v=1;
+			}			
 
 
 
@@ -5942,6 +6316,52 @@ int parse_cmdline_options(void) {
                                 command_line_8bitide.v=1;
 			}
 
+
+			else if (!strcmp(argv[puntero_parametro],"--diviface-ram-size")) {
+				siguiente_parametro_argumento();
+				int valor=parse_string_to_number(argv[puntero_parametro]);
+
+				/*
+				int diviface_current_ram_memory_bits=4; //Por defecto 128 KB
+
+				-using 2 bits: 32 kb
+				-using 3 bits: 64 kb
+				-using 4 bits: 128 kb (default)
+				-using 5 bits: 256 kb
+				-using 6 bits: 512 kb
+				*/
+
+				switch (valor) {
+					case 32:
+						diviface_current_ram_memory_bits=2;
+					break;
+
+					case 64:
+						diviface_current_ram_memory_bits=3;
+					break;
+
+					case 128:
+						diviface_current_ram_memory_bits=4;
+					break;
+
+					case 256:
+						diviface_current_ram_memory_bits=5;
+					break;
+
+					case 512:
+						diviface_current_ram_memory_bits=6;
+					break;
+
+					default:
+						printf ("Invalid value for diviface ram size\n");
+						exit(1);
+					break;
+				}
+
+			}
+
+
+
 			else if (!strcmp(argv[puntero_parametro],"--enable-zxpand")) {
 				command_line_zxpand.v=1;
 			}
@@ -5978,6 +6398,13 @@ int parse_cmdline_options(void) {
 			  else {
 			    sprintf (esxdos_handler_root_dir,"%s",argv[puntero_parametro]);
 			  }
+			}
+
+			else if (!strcmp(argv[puntero_parametro],"--esxdos-local-dir")) {
+                          siguiente_parametro_argumento();
+
+			  command_line_esxdos_local_dir_path=argv[puntero_parametro];
+			  command_line_esxdos_local_dir.v=1;
 			}
 
 /*
@@ -6263,9 +6690,23 @@ int parse_cmdline_options(void) {
                                 screen_show_splash_texts.v=0;
 			}
 
+			//Por defecto esta activo. Se mantiene solo por compatibilidad
 			else if (!strcmp(argv[puntero_parametro],"--cpu-usage")) {
 				screen_show_cpu_usage.v=1;
 			}
+
+			else if (!strcmp(argv[puntero_parametro],"--no-cpu-usage")) {
+				screen_show_cpu_usage.v=0;
+			}			
+
+			else if (!strcmp(argv[puntero_parametro],"--no-cpu-temp")) {
+				screen_show_cpu_temp.v=0;
+			}		
+
+
+			else if (!strcmp(argv[puntero_parametro],"--no-fps")) {
+				screen_show_fps.v=0;
+			}							
 
 			else if (!strcmp(argv[puntero_parametro],"--nowelcomemessage")) {
                                 opcion_no_splash.v=1;
@@ -6333,6 +6774,10 @@ int parse_cmdline_options(void) {
                                 menu_invert_mouse_scroll.v=1;
 			}
 
+			else if (!strcmp(argv[puntero_parametro],"--allow-background-windows")) {
+                                menu_allow_background_windows=1;
+			}
+
 			else if (!strcmp(argv[puntero_parametro],"--realvideo")) {
 				enable_rainbow();
 			}
@@ -6340,6 +6785,15 @@ int parse_cmdline_options(void) {
 			else if (!strcmp(argv[puntero_parametro],"--no-detect-realvideo")) {
 				autodetect_rainbow.v=0;
 			}
+
+			else if (!strcmp(argv[puntero_parametro],"--tbblue-legacy-hicolor")) {
+				tbblue_store_scanlines.v=1;
+			}
+
+			else if (!strcmp(argv[puntero_parametro],"--tbblue-legacy-border")) {
+				tbblue_store_scanlines_border.v=1;
+			}
+
 
 			/*else if (!strcmp(argv[puntero_parametro],"--tsconf-fast-render")) {
 				tsconf_si_render_spritetile_rapido.v=1;
@@ -6546,10 +7000,19 @@ int parse_cmdline_options(void) {
 					exit(1);
 				}
 				audio_midi_port=valor;
-			}			
+			}	
+
+			else if (!strcmp(argv[puntero_parametro],"--midi-raw-device")) {
+				siguiente_parametro_argumento();
+				strcpy(audio_raw_midi_device_out,argv[puntero_parametro]);
+			}	
 
 			else if (!strcmp(argv[puntero_parametro],"--midi-allow-tone-noise")) {
 				midi_output_record_noisetone.v=1;
+			}
+
+			else if (!strcmp(argv[puntero_parametro],"--midi-no-raw-mode")) {
+				audio_midi_raw_mode=0;
 			}
 
 
@@ -7085,6 +7548,10 @@ int parse_cmdline_options(void) {
 				stats_asked.v=1;
 			}
 
+			else if (!strcmp(argv[puntero_parametro],"--tbblue-autoconfigure-sd-already-asked")) {
+				tbblue_autoconfigure_sd_asked.v=1;
+			}
+
 			else if (!strcmp(argv[puntero_parametro],"--stats-send-enabled")) {
 				stats_enabled.v=1;
 			}		
@@ -7165,6 +7632,18 @@ int parse_cmdline_options(void) {
 
 			else if (!strcmp(argv[puntero_parametro],"--clear-all-windowgeometry")) {
 				util_clear_all_windows_geometry();
+			}
+
+			else if (!strcmp(argv[puntero_parametro],"--restorewindow")) {
+				siguiente_parametro_argumento();
+
+				strcpy(restore_window_array[total_restore_window_array_elements++],argv[puntero_parametro]);
+
+			}
+
+
+			else if (!strcmp(argv[puntero_parametro],"--enable-restore-windows")) {
+				menu_reopen_background_windows_on_start.v=1;
 			}
 
 			else if (!strcmp(argv[puntero_parametro],"--tonegenerator")) {
@@ -7278,7 +7757,7 @@ void print_funny_message(void)
 
 
 
-
+char macos_path_to_executable[PATH_MAX];
 
 //Proceso inicial
 int zesarux_main (int main_argc,char *main_argv[]) {
@@ -7310,17 +7789,22 @@ int zesarux_main (int main_argc,char *main_argv[]) {
 	//de MacOS Catalina
 
 	//Cambiar a la carpeta donde estamos ejecutando el binario
-	
-	//Algunas comprobaciones, por si acaso
-	if (main_argv[0]!=NULL) { 
-		if (main_argv[0][0]!=0) {
+
+	//por si acaso, por defecto a cadena vacia
+	macos_path_to_executable[0]=0;
+
+	uint32_t bufsize=PATH_MAX;
+
+	_NSGetExecutablePath(macos_path_to_executable, &bufsize);
+
+	if (macos_path_to_executable[0]!=0) { 
 
 			char dir[PATH_MAX];
-			util_get_dir(main_argv[0],dir);
+			util_get_dir(macos_path_to_executable,dir);
 
 			printf ("Changing to Mac App bundle directory: %s\n",dir);
 			chdir(dir);
-		}
+		
 	}
 	/*
 	Para testeo, para eliminar permisos de acceso en Catalina, ejecutar:
@@ -7523,10 +8007,13 @@ tooltip_enabled.v=1;
 	peek_byte=peek_byte_vacio;
 	peek_byte_no_time=peek_byte_vacio;	
 	lee_puerto=lee_puerto_vacio;
+	//lee_puerto_no_time=lee_puerto_vacio;
 	out_port=out_port_vacio;	
 	fetch_opcode=fetch_opcode_vacio;
 	realjoystick_init=realjoystick_null_init;
 	realjoystick_main=realjoystick_null_main;
+
+	ql_readbyte_no_ports_function=ql_readbyte_no_ports_vacio;
 	//realjoystick_hit=realjoystick_null_hit;
 
 	//Inicializo tambien la de push
@@ -7714,6 +8201,7 @@ init_randomize_noise_value();
 #endif	
 
 
+	TIMESENSOR_INIT();
 
 
 	debug_printf (VERBOSE_INFO,"Starting emulator");
@@ -7791,7 +8279,9 @@ init_randomize_noise_value();
 
 
 	init_chip_ay();
+	init_chip_sn();
 	ay_init_filters();
+	sn_init_filters();
 	
 	mid_reset_export_buffers();
 
@@ -7822,21 +8312,6 @@ init_randomize_noise_value();
 
 	scr_refresca_pantalla();
 
-#ifdef USE_REALTIME
-	//Establecemos prioridad realtime
-struct sched_param sparam;
-
-        if ((sparam.sched_priority = sched_get_priority_max(SCHED_RR))==-1) {
-                debug_printf (VERBOSE_WARN,"Error setting realtime priority : %s",strerror(errno));
-        }
-
-        else if (sched_setscheduler(0, SCHED_RR, &sparam)) {
-                debug_printf (VERBOSE_WARN,"Error setting realtime priority : %s",strerror(errno));
-        }
-
-	else debug_printf (VERBOSE_INFO,"Using realtime priority");
-#endif
-
 
 
 	//Capturar segmentation fault
@@ -7864,6 +8339,10 @@ struct sched_param sparam;
 	signal(SIGPIPE, sigpipe_signal_handler);	
 #endif
 
+
+	//Restaurar ventanas, si conviene. Hacerlo aqui y no mas tarde, para evitar por ejemplo que al salir el logo de splash
+	//aparezcan las ventanas en background
+	zxvision_restore_windows_on_startup();
 
 	//Inicio bucle principal
 	reg_pc=0;
@@ -7949,7 +8428,16 @@ struct sched_param sparam;
 
 
 
-	if (command_line_esxdos_handler.v) esxdos_handler_enable();
+	if (command_line_esxdos_handler.v) {
+		esxdos_handler_enable();
+
+		// Solo meter el directorio local si esta habilitado esxdos
+        	if (command_line_esxdos_local_dir.v) {
+	                // Esto lo hacemos aqui porque antes en el esxdos_handler_enable se inicializa tambien esxdos y por tanto se borra esxdos_handler_cwd
+        	        strcpy(esxdos_handler_cwd,command_line_esxdos_local_dir_path);
+        	}
+	}
+
 
 	if (command_line_zxpand.v) zxpand_enable();
 
@@ -8052,6 +8540,9 @@ struct sched_param sparam;
 	stats_check_updates();
 	send_stats_server();
 
+	//Restaurar ventanas, si conviene
+	//zxvision_restore_windows_on_startup();	
+
 	//Inicio bucle de emulacion
 
 
@@ -8150,8 +8641,10 @@ void dump_ram_file_on_exit(void)
 }
 
 
-
-void end_emulator(void)
+//Se pasa parametro que dice si guarda o no la configuración.
+//antes se guardaba siempre, pero ahora en casos de recepcion de señales de terminar, no se guarda,
+//pues generaba segfaults en las rutinas de guardar ventanas (--restorewindow)
+void end_emulator_saveornot_config(int saveconfig)
 {
 	debug_printf (VERBOSE_INFO,"End emulator");
 	
@@ -8176,7 +8669,7 @@ void end_emulator(void)
 
 	menu_abierto=0;
 
-	if (save_configuration_file_on_exit.v) {
+	if (saveconfig && save_configuration_file_on_exit.v) {
 		int uptime_seconds=timer_get_uptime_seconds();
   
   		total_minutes_use +=uptime_seconds/60;
@@ -8240,4 +8733,10 @@ void end_emulator(void)
 
   exit(0);
 
+}
+
+
+void end_emulator(void)
+{
+	end_emulator_saveornot_config(1);
 }

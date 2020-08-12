@@ -39,6 +39,10 @@
 #include "chardetect.h"
 #include "tsconf.h"
 #include "settings.h"
+#include "msx.h"
+#include "coleco.h"
+#include "sg1000.h"
+#include "svi.h"
 
 void scrsimpletext_repinta_pantalla(void);
 
@@ -78,7 +82,7 @@ void scrsimpletext_putpixel_final(int x GCC_UNUSED,int y GCC_UNUSED,unsigned int
 
 
 //Rutina de putchar para menu
-void scrsimpletext_putchar_menu(int x,int y, z80_byte caracter,z80_byte tinta,z80_byte papel)
+void scrsimpletext_putchar_menu(int x,int y, z80_byte caracter,int tinta,int papel)
 {
 	
 	//No escribimos nada. Este driver no soporta menu
@@ -90,7 +94,7 @@ void scrsimpletext_putchar_menu(int x,int y, z80_byte caracter,z80_byte tinta,z8
 	
 }
 
-void scrsimpletext_putchar_footer(int x,int y, z80_byte caracter,z80_byte tinta,z80_byte papel)
+void scrsimpletext_putchar_footer(int x,int y, z80_byte caracter,int tinta,int papel)
 {
 	
 	//Para evitar warnings al compilar de "unused parameter"
@@ -144,6 +148,19 @@ int scrsimpletext_driver_can_ext_desktop (void)
         return 0;
 }
 
+void scrsimpletext_textspeech_filter_welcome_message(void)
+{
+
+	char texto_welcome[40];
+	sprintf(texto_welcome," Welcome to ZEsarUX v." EMULATOR_VERSION " ");
+	textspeech_print_speech(texto_welcome);
+
+	char texto_edition[40];
+	sprintf(texto_edition," " EMULATOR_EDITION_NAME " ");
+	textspeech_print_speech(texto_edition);	
+
+	
+}
 
 int scrsimpletext_init (void){ 
 	
@@ -151,6 +168,7 @@ int scrsimpletext_init (void){
 	
 	
 	//Mismos mensajes de bienvenida a traves de filtro texto
+	if (opcion_no_splash.v==0) scrsimpletext_textspeech_filter_welcome_message();
 	
 	
 	scr_debug_registers=scrsimpletext_debug_registers;
@@ -410,7 +428,15 @@ void scrsimpletext_repinta_pantalla(void)
 	//enviar Ansi inicio pantalla
 	screen_text_send_ansi_go_home();
 	
-	if (MACHINE_IS_ZX8081) {
+		 //si todo de pixel a ascii art
+     if (rainbow_enabled.v && screen_text_all_refresh_pixel.v) {
+     
+scr_refresca_pantalla_tsconf_text(scr_simpletext_common_fun_color,scr_simpletext_common_fun_caracter,scr_simpletext_common_fun_saltolinea,screen_text_all_refresh_pixel_scale);
+     
+     }
+	
+	
+	else if (MACHINE_IS_ZX8081) {
 		screen_text_repinta_pantalla_zx81();
 	}
 	

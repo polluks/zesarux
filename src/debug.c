@@ -86,6 +86,15 @@
 #include "settings.h"
 #include "expression_parser.h"
 #include "atomic.h"
+#include "core_msx.h"
+#include "core_coleco.h"
+#include "msx.h"
+#include "coleco.h"
+#include "core_sg1000.h"
+#include "sn76489an.h"
+#include "core_svi.h"
+#include "svi.h"
+#include "vdp_9918a.h"
 
 
 struct timeval debug_timer_antes, debug_timer_ahora;
@@ -1580,6 +1589,30 @@ void set_cpu_core_loop(void)
       cpu_core_loop_name="MK14";
     break;
 
+    case CPU_CORE_MSX:
+      debug_printf(VERBOSE_INFO,"Setting MSX CPU core");
+      cpu_core_loop=cpu_core_loop_msx;
+      cpu_core_loop_name="MSX";
+    break;	
+
+    case CPU_CORE_COLECO:
+      debug_printf(VERBOSE_INFO,"Setting COLECO CPU core");
+      cpu_core_loop=cpu_core_loop_coleco;
+      cpu_core_loop_name="COLECO";
+    break;		
+
+    case CPU_CORE_SG1000:
+      debug_printf(VERBOSE_INFO,"Setting SG1000 CPU core");
+      cpu_core_loop=cpu_core_loop_sg1000;
+      cpu_core_loop_name="SG1000";
+    break;	
+
+    case CPU_CORE_SVI:
+      debug_printf(VERBOSE_INFO,"Setting SVI CPU core");
+      cpu_core_loop=cpu_core_loop_svi;
+      cpu_core_loop_name="SVI";
+    break;			
+
 
                 default:
                         cpu_panic("Unknown cpu core");
@@ -1722,7 +1755,7 @@ z80_bit cpu_trans_log_ignore_repeated_ldxr={0};
 
 
 
-
+//TODO: esto podria usar funcion util_rotate_files
 void transaction_log_rotate_files(int archivos)
 {
 	//Primero cerrar archivo
@@ -2334,6 +2367,18 @@ void cpu_history_reg_pc_bin_to_string(z80_byte *p,char *destino)
   );
 }
 
+//Funcion para leer byte preservando variable MRA
+z80_byte peek_byte_no_time_no_change_mra(z80_int dir)
+{
+	unsigned int antes_debug_mmu_mra=debug_mmu_mra;
+
+	z80_byte value=peek_byte_no_time(dir);
+
+	debug_mmu_mra=antes_debug_mmu_mra;
+
+	return value;
+
+}
 
 //Guarda en puntero z80_byte en con contenido de registros en binario
 //Registros 16 bits guardados en little endian
@@ -2381,13 +2426,13 @@ void cpu_history_regs_to_bin(z80_byte *p)
   	p[26]=im_mode;
 	p[27]=iff1.v | (iff2.v<<1);
 
-    p[28]=peek_byte_no_time(reg_pc);
-    p[29]=peek_byte_no_time(reg_pc+1);
-    p[30]=peek_byte_no_time(reg_pc+2);
-    p[31]=peek_byte_no_time(reg_pc+3);
+    p[28]=peek_byte_no_time_no_change_mra(reg_pc);
+    p[29]=peek_byte_no_time_no_change_mra(reg_pc+1);
+    p[30]=peek_byte_no_time_no_change_mra(reg_pc+2);
+    p[31]=peek_byte_no_time_no_change_mra(reg_pc+3);
 
-    p[32]=peek_byte_no_time(reg_sp);
-    p[33]=peek_byte_no_time(reg_sp+1);	
+    p[32]=peek_byte_no_time_no_change_mra(reg_sp);
+    p[33]=peek_byte_no_time_no_change_mra(reg_sp+1);	
 
  
 }
@@ -4529,9 +4574,22 @@ void debug_get_ioports(char *stats_buffer)
   	                }
 
   		}
-
-
   	}
+
+  	if (sn_chip_present.v) {
+
+  			sprintf (buf_linea,"\nSN76489AN chip:\n");
+  			sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+
+
+			int i;
+			for (i=0;i<10;i++) {
+					sprintf (buf_linea,"%02X:  %02X\n",i,sn_chip_registers[i]);
+					sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+			}
+
+  		
+  	}	  
 
   	if (MACHINE_IS_Z88) {
   		sprintf (buf_linea,"Z88 Blink:\n\n");
@@ -4617,6 +4675,40 @@ void debug_get_ioports(char *stats_buffer)
   		sprintf (buf_linea,"ZX80/81 last out port value: %02X\n",zx8081_last_port_write_value);
   		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
   	}
+
+  	if (MACHINE_IS_MSX) {
+  		sprintf (buf_linea,"PPI Port A: %02X\n",msx_ppi_register_a);
+  		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+
+  		sprintf (buf_linea,"PPI Port B: %02X\n",msx_ppi_register_b);
+  		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+
+  		sprintf (buf_linea,"PPI Port C: %02X\n",msx_ppi_register_c);
+  		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);		  		  
+  	}	  
+
+  	if (MACHINE_IS_SVI) {
+  		sprintf (buf_linea,"PPI Port A: %02X\n",svi_ppi_register_a);
+  		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+
+  		sprintf (buf_linea,"PPI Port B: %02X\n",svi_ppi_register_b);
+  		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+
+  		sprintf (buf_linea,"PPI Port C: %02X\n",svi_ppi_register_c);
+  		sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);		  		  
+  	}
+
+	if (MACHINE_HAS_VDP_9918A) {
+  			sprintf (buf_linea,"\nVDP 9918A chip:\n");
+  			sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+
+
+			int i;
+			for (i=0;i<8;i++) {
+					sprintf (buf_linea,"%02X:  %02X\n",i,vdp_9918a_registers[i]);
+					sprintf (&stats_buffer[index_buffer],"%s",buf_linea); index_buffer +=strlen(buf_linea);
+			}		
+	}	  	  
 
           stats_buffer[index_buffer]=0;
 
@@ -4800,6 +4892,12 @@ int i;
         debug_memory_zone_debug_write_value(resultado);
       }
     }	
+
+    else if (!strcmp(comando_sin_parametros,"reset-tstatp")) {
+      debug_printf (VERBOSE_DEBUG,"Running reset-tstatp command");
+      debug_t_estados_parcial=0;
+    }
+
 
     else {
       debug_printf (VERBOSE_DEBUG,"Unknown command %s",comando_sin_parametros);
@@ -5158,6 +5256,167 @@ typedef struct s_debug_memory_segment debug_memory_segment;
 				}
   			}
 
+
+  			//MSX
+  			if (MACHINE_IS_MSX) {
+				int pagina;
+				segmentos_totales=4;
+				z80_byte mapping_register=msx_ppi_register_a;
+
+				for (pagina=0;pagina<4;pagina++) {
+	  				sprintf (segmentos[pagina].shortname,"SL%d",mapping_register & 3);
+	  				sprintf (segmentos[pagina].longname,"Slot %02X",mapping_register & 3);
+					segmentos[pagina].length=16384;
+					segmentos[pagina].start=16384*pagina;
+
+					mapping_register=mapping_register >> 2;
+				}
+  			}
+
+  			//SVI
+  			if (MACHINE_IS_SVI) {
+
+				segmentos_totales=2;
+
+				//Por defecto: bank01 rom basic, bank02 ram
+				char low_type='O';
+				z80_byte low_number=1;
+
+				char high_type='A';
+				z80_byte high_number=2;
+
+    z80_byte page_config=ay_3_8912_registros[ay_chip_selected][15];
+
+/*
+PSG Port B Output
+
+Bit Name    Description
+1   /CART   Memory bank 11, ROM 0000-7FFF (Cartridge /CCS1, /CCS2)  
+2   /BK21   Memory bank 21, RAM 0000-7FFF                           
+3   /BK22   Memory bank 22, RAM 8000-FFFF                           
+4   /BK31   Memory bank 31, RAM 0000-7FFF                           
+
+5   /BK32   Memory bank 32, RAM 8000-FFFF                           
+6   CAPS    Caps-Lock diod
+7   /ROMEN0 Memory bank 12, ROM 8000-BFFF* (Cartridge /CCS3)        
+8   /ROMEN1 Memory bank 12, ROM C000-FFFF* (Cartridge /CCS4)        
+*/	
+
+
+				if (page_config!=0xFF) {
+
+					//Ver bits activos
+					//Memory bank 11, ROM 0000-7FFF (Cartridge /CCS1, /CCS2)  
+					if ((page_config & 1)==0) {
+						low_number=11;
+					}
+
+					//Memory bank 21, RAM 0000-7FFF 
+					if ((page_config & 2)==0) {
+						low_number=21;
+						low_type='A';
+					}    
+
+					//Memory bank 22, RAM 8000-FFFF 
+					if ((page_config & 4)==0) {
+						high_number=22;
+					}    
+
+					//Memory bank 31, RAM 0000-7FFF
+					if ((page_config & 8)==0) {
+						low_number=31;
+						low_type='A';
+					}    
+
+					//Memory bank 32, RAM 8000-FFFF
+					if ((page_config & 16)==0) {
+						high_number=32;
+					}    
+
+					//TODO bits 6,7
+				}				
+
+				
+				
+				sprintf (segmentos[0].shortname,"R%c%02d",low_type,low_number);
+				sprintf (segmentos[0].longname,"R%cM %02d",low_type,low_number);
+
+				sprintf (segmentos[1].shortname,"R%c%02d",high_type,high_number);
+				sprintf (segmentos[1].longname,"R%cM %02d",high_type,high_number);					
+
+
+				segmentos[0].length=32768;
+				segmentos[0].start=0;
+
+				segmentos[1].length=32768;
+				segmentos[1].start=32768;
+
+
+	
+  			}			  
+
+			if (MACHINE_IS_COLECO) {
+				segmentos_totales=8;
+
+  				int pagina;
+  				for (pagina=0;pagina<segmentos_totales;pagina++) {
+
+					segmentos[pagina].length=8192;
+					segmentos[pagina].start=8192*pagina;
+				}
+
+				//0-3
+
+				strcpy (segmentos[0].shortname,"BIO");
+				strcpy (segmentos[0].longname,"BIOS ROM");	
+
+				strcpy (segmentos[1].shortname,"EXP");
+				strcpy (segmentos[1].longname,"Expansion port");	
+
+				strcpy (segmentos[2].shortname,"EXP");
+				strcpy (segmentos[2].longname,"Expansion port");	
+
+				strcpy (segmentos[3].shortname,"RAM");
+				strcpy (segmentos[3].longname,"RAM (1 KB)");													
+
+				//4-7
+				for (pagina=4;pagina<8;pagina++) {		
+						strcpy (segmentos[pagina].shortname,"CR");
+						strcpy (segmentos[pagina].longname,"Cartridge ROM");						
+				}
+
+				/*
+0000-1FFF = BIOS ROM
+2000-3FFF = Expansion port
+4000-5FFF = Expansion port
+6000-7FFF = RAM (1K mapped into an 8K spot)
+8000-9FFF = Cart ROM 
+A000-BFFF = Cart ROM 
+C000-DFFF = Cart ROM      
+E000-FFFF = Cart ROM 
+				*/
+			}
+
+			if (MACHINE_IS_SG1000) {
+				/*
+$0000-$bfff	Cartridge (ROM/RAM/etc)
+$c000-$c3ff	System RAM
+$c400-$ffff	System RAM (mirrored every 1KB)				
+				*/
+				segmentos_totales=2;
+
+				//0
+				segmentos[0].length=0xc000;
+				segmentos[0].start=0;	
+				strcpy (segmentos[0].shortname,"ROM");
+				strcpy (segmentos[0].longname,"Cartridge ROM");				
+
+				//1
+				segmentos[1].length=16384;
+				segmentos[1].start=0xc000;	
+				strcpy (segmentos[1].shortname,"RAM");
+				strcpy (segmentos[1].longname,"RAM (1 KB)");								
+			}
 
 
   			//Paginas RAM en CHLOE
@@ -5980,3 +6239,106 @@ int debug_get_timestamp(char *destino)
 			 
         
 }
+
+
+
+//Rutinas de timesensors. Agrega un define TIMESENSORS_ENABLED en compileoptions.h para activarlo y lanza make
+#ifdef TIMESENSORS_ENABLED
+
+#include "timer.h"
+
+struct s_timesensor_entry timesensors_array[MAX_TIMESENSORS];
+
+int timesensors_started=0;
+
+void timesensor_call_pre(enum timesensor_id id)
+{
+	if (!timesensors_started) return;
+
+	timer_stats_current_time(&timesensors_array[id].tiempo_antes);
+}
+
+void timesensor_call_post(enum timesensor_id id)
+{
+
+	if (!timesensors_started) return;
+
+
+	long diferencia=timer_stats_diference_time(&timesensors_array[id].tiempo_antes,&timesensors_array[id].tiempo_despues);
+
+
+	//Y agregar
+
+	int indice=timesensors_array[id].index_metrics;
+
+	if (indice<MAX_TIMESENSORS_METRICS) {
+		timesensors_array[id].metrics[indice]=diferencia;
+
+		timesensors_array[id].index_metrics++;
+
+		printf ("Agregando metrics valor: %ld\n",diferencia);
+	}
+}
+
+long timesensor_call_mediatime(enum timesensor_id id)
+{
+
+	long acumulado=0;
+	int total=timesensors_array[id].index_metrics;
+
+	int i;
+
+	printf ("Calculando la media para id. %d total: %d\n",id,total);
+
+	if (total==0) return 0;
+
+	//Sumar todos
+	for (i=0;i<total;i++) {
+		printf ("Sumando %ld\n",timesensors_array[id].metrics[i]);
+		acumulado +=timesensors_array[id].metrics[i];
+	}
+
+	printf ("suma. %ld\n",acumulado);
+
+	//y dividir
+	acumulado /=total;
+
+	printf ("total. %ld\n",acumulado);
+
+	return acumulado;
+}
+
+
+long timesensor_call_maxtime(enum timesensor_id id)
+{
+
+	long maximo=0;
+	int total=timesensors_array[id].index_metrics;
+
+	int i;
+
+	printf ("Calculando maximo para id. %d total: %d\n",id,total);
+
+	for (i=0;i<total;i++) {
+		long actual=timesensors_array[id].metrics[i];;
+		if (actual>maximo) maximo=actual;
+	}
+
+	printf ("maximo. %ld\n",maximo);
+
+
+
+	return maximo;
+}
+
+void timesensor_call_init(void)
+{
+	int i;
+
+	for (i=0;i<MAX_TIMESENSORS;i++) {
+		timesensors_array[i].index_metrics=0;
+	}
+}
+
+
+#endif

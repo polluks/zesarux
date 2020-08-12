@@ -329,49 +329,69 @@ reached:
 int diviface_poke_byte_to_internal_memory(z80_int dir,z80_byte valor)
 {
 
-	//Si en tbblue y escribiendo en memoria layer2, ignorar, dado que esa memoria layer2 en escritura se mapea en 0-3fffh
-	if (MACHINE_IS_TBBLUE && tbblue_write_on_layer2() ) return 0;
+	//Dado que en tbblue, divmmc tiene prioridad sobre layer2 en tbblue, no hay caso especial para layer2
+	
 
 	if ((diviface_control_register&128)==0 && diviface_paginacion_automatica_activa.v==0) {
-  	return 0;
-  }
+		return 0;
+	}	
 
-  else {
+	else {
 
-	//Si la mmu del tbblue esta alterando esta zona de memoria
-	if (MACHINE_IS_TBBLUE && dir<16384) {
-		//Despues de salir de esta funcion siempre llama a escritura de memoria de la capa que haya por debajo
-		//Por tanto solo hay que determinar si la memoria divmmc se debe escribir (valor en MMU 255),
-		//Y si no se debe, simplemente hacer return de aqui
-	        z80_byte reg_mmu_value=return_tbblue_mmu_segment(dir);
-                if (reg_mmu_value!=255) return 0;
-	}
+	
+	/*
 
+Prioridades Next. Divmmc encima de mmu. Por tanto no hay caso especial
+
+
+-- memory decode order
+   --
+   -- 0-16k:
+   --   1. bootrom
+   --   2. machine config mapping
+   --   3. multiface
+   --   4. divmmc
+   --   5. layer 2 mapping
+   --   6. mmu
+   --   7. romcs expansion bus
+   --   8. rom
+   --
+   -- 16k-48k:
+   --   1. layer 2 mapping
+   --   2. mmu
+   --
+   -- 48k-64k:
+   --   1. mmu
+
+
+*/
+	
 		//Si poke a eprom o ram 3 read only.
 
-  	if (dir<8192) {
+		if (dir<8192) {
 
-			//Si poke a eprom cuando conmem=1
-			if (diviface_control_register&128 && diviface_eprom_write_jumper.v) {
-				debug_printf (VERBOSE_DEBUG,"Diviface eprom writing address: %04XH value: %02XH",dir,valor);
-				//Escribir en eprom siempre que jumper eprom está permitiendolo
-				z80_byte *puntero=diviface_return_memory_paged_pointer(dir);
-				*puntero=valor;
-				return 1;
+				//Si poke a eprom cuando conmem=1
+				if (diviface_control_register&128 && diviface_eprom_write_jumper.v) {
+					debug_printf (VERBOSE_DEBUG,"Diviface eprom writing address: %04XH value: %02XH",dir,valor);
+					//Escribir en eprom siempre que jumper eprom está permitiendolo
+					z80_byte *puntero=diviface_return_memory_paged_pointer(dir);
+					*puntero=valor;
+					return 1;
+				}
+
+				//No escribir
+				return 0;
 			}
 
-			//No escribir
-			return 0;
+		if (dir<16384) {
+			z80_byte *puntero=diviface_return_memory_paged_pointer(dir);
+				*puntero=valor;
+				return 1;
 		}
-
-    if (dir<16384) {
-    	z80_byte *puntero=diviface_return_memory_paged_pointer(dir);
-			*puntero=valor;
-			return 1;
-    }
 		return 0;
 
-  }
+	}
+
 }
 
 z80_byte diviface_poke_byte_no_time(z80_int dir,z80_byte valor)
@@ -433,28 +453,37 @@ z80_byte diviface_peek_byte_to_internal_memory(z80_int dir)
 {
 	//printf ("returning diviface internal memory address from diviface_peek_byte_no_time %XH\n",dir);
 	z80_byte *puntero=diviface_return_memory_paged_pointer(dir);
-	if (MACHINE_IS_TBBLUE) {
-		//Ver si hay mapeo de MMU diferente a la de por defecto
-		/*
 		
-(R/W) 0x50 (80) => MMU slot 0
-  bits 7-0 = Set a Spectrum RAM page at position 0x0000 to 0x1fff
-  (Reset to 255 after a reset)
-  Pages can be from 0 to 223 on a full expanded Next. 
-  A 255 value remove the RAM page and map the current ROM
+		
+//
+/*
 
-(R/W) 0x51 (81) => MMU slot 1
-  bits 7-0 = Set a Spectrum RAM page at position 0x2000 to 0x3fff
-  (Reset to 255 after a reset)
-  Pages can be from 0 to 223 on a full expanded Next. 
-  A 255 value remove the RAM page and map the current ROM
-		*/
-		z80_byte reg_mmu_value=return_tbblue_mmu_segment(dir);
-		if (reg_mmu_value!=255) {
-			//Mapeo diferente
-            puntero=diviface_return_tbblue_memory_pointer(dir);
-		}
-	}
+Prioridades Next. Divmmc encima de mmu. Por tanto no hay caso especial
+
+
+-- memory decode order
+   --
+   -- 0-16k:
+   --   1. bootrom
+   --   2. machine config mapping
+   --   3. multiface
+   --   4. divmmc
+   --   5. layer 2 mapping
+   --   6. mmu
+   --   7. romcs expansion bus
+   --   8. rom
+   --
+   -- 16k-48k:
+   --   1. layer 2 mapping
+   --   2. mmu
+   --
+   -- 48k-64k:
+   --   1. mmu
+
+
+*/
+		
+
 	return *puntero;
 }
 

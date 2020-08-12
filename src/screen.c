@@ -51,6 +51,9 @@
 #include "tsconf.h"
 #include "mk14.h"
 #include "settings.h"
+#include "vdp_9918a.h"
+#include "msx.h"
+#include "coleco.h"
 
 //Incluimos estos dos para la funcion de fade out
 #ifdef COMPILE_XWINDOWS
@@ -84,6 +87,12 @@ z80_bit screen_show_splash_texts={1};
 
 //mostrar uso de cpu en footer
 z80_bit screen_show_cpu_usage={1};
+
+//mostrar temperatura de cpu en footer
+z80_bit screen_show_cpu_temp={1};
+
+//mostrar fps en footer
+z80_bit screen_show_fps={1};
 
 //Si pantalla final rainbow se reduce tamanyo a 4/3 (dividir por 4, mult por 3)
 z80_bit screen_reduce_075={0};
@@ -136,10 +145,10 @@ void (*scr_debug_registers)(void);
 void (*scr_messages_debug)(char *mensaje);
 
 //Rutina para imprimir un caracter del menu
-void (*scr_putchar_menu) (int x,int y, z80_byte caracter,z80_byte tinta,z80_byte papel);
+void (*scr_putchar_menu) (int x,int y, z80_byte caracter,int tinta,int papel);
 
 //Rutina para imprimir un caracter en el pie de la pantalla
-void (*scr_putchar_footer) (int x,int y, z80_byte caracter,z80_byte tinta,z80_byte papel);
+void (*scr_putchar_footer) (int x,int y, z80_byte caracter,int tinta,int papel);
 
 void (*scr_putchar_zx8081) (int x,int y, z80_byte caracter);
 
@@ -157,6 +166,14 @@ void screen_tsconf_refresca_rainbow(void);
 //a que los caracteres no imprimibles de zx8081 se muestren como ? o como caracteres simulados
 z80_bit texto_artistico;
 int umbral_arttext=4;
+
+
+//si el refresco de pantalla para drivers de texto, con rainbow, siempre convierte todo de pixel a ascii art
+z80_bit screen_text_all_refresh_pixel={0};
+
+int screen_text_all_refresh_pixel_scale=10;
+          
+z80_bit screen_text_all_refresh_pixel_invert={0};
 
 
 //Para frameskip manual
@@ -204,7 +221,8 @@ total_palette_colours total_palette_colours_array[TOTAL_PALETAS_COLORES]={
 	{"Prism","Prism 12 bit palette",PRISM_INDEX_FIRST_COLOR,PRISM_TOTAL_PALETTE_COLOURS},
 	{"Sam Coupe","Sam 128 colour palette",SAM_INDEX_FIRST_COLOR,SAM_TOTAL_PALETTE_COLOURS},
 	{"TBBlue RGB9","TBBlue 512 colour palette",RGB9_INDEX_FIRST_COLOR,RGB9_TOTAL_PALETTE_COLOURS},
-	{"TSConf","TSConf 15 bit palette",TSCONF_INDEX_FIRST_COLOR,TSCONF_TOTAL_PALETTE_COLOURS}
+	{"TSConf","TSConf 15 bit palette",TSCONF_INDEX_FIRST_COLOR,TSCONF_TOTAL_PALETTE_COLOURS},
+	{"VDP9918A","16 colour standard",VDP_9918_INDEX_FIRST_COLOR,VDP_9918_TOTAL_PALETTE_COLOURS}
 };
 
 
@@ -317,6 +335,71 @@ const int z88_colortable_original[4]={
 
 //ubicacion en el array de colores de los de Z88
 //ver screen.h, Z88_PXCOLON, etc
+
+
+//colores para chip de msx
+const int vdp9918_colortable_original[16]={
+0x000000,
+0x010101,
+0x3eb849,
+0x74d07d,
+0x5955e0,
+0x8076f1,
+0xb95e51,
+0x65dbef,
+0xdb6559,
+0xff897d,
+0xccc35e,
+0xded087,
+0x3aa241,
+0xb766b5,
+0xcccccc,
+0xffffff
+};
+
+
+
+
+//Tabla con colores para tema de GUI Solarized. 
+/*
+SOLARIZED HEX     16/8 TERMCOL  XTERM/HEX   L*A*B      RGB         HSB
+--------- ------- ---- -------  ----------- ---------- ----------- -----------
+base03    #002b36  8/4 brblack  234 #1c1c1c 15 -12 -12   0  43  54 193 100  21
+base02    #073642  0/4 black    235 #262626 20 -12 -12   7  54  66 192  90  26
+base01    #586e75 10/7 brgreen  240 #585858 45 -07 -07  88 110 117 194  25  46
+base00    #657b83 11/7 bryellow 241 #626262 50 -07 -07 101 123 131 195  23  51
+base0     #839496 12/6 brblue   244 #808080 60 -06 -03 131 148 150 186  13  59
+base1     #93a1a1 14/4 brcyan   245 #8a8a8a 65 -05 -02 147 161 161 180   9  63
+base2     #eee8d5  7/7 white    254 #e4e4e4 92 -00  10 238 232 213  44  11  93
+base3     #fdf6e3 15/7 brwhite  230 #ffffd7 97  00  10 253 246 227  44  10  99
+yellow    #b58900  3/3 yellow   136 #af8700 60  10  65 181 137   0  45 100  71
+orange    #cb4b16  9/3 brred    166 #d75f00 50  50  55 203  75  22  18  89  80
+red       #dc322f  1/1 red      160 #d70000 50  65  45 220  50  47   1  79  86
+magenta   #d33682  5/5 magenta  125 #af005f 50  65 -05 211  54 130 331  74  83
+violet    #6c71c4 13/5 brmagenta 61 #5f5faf 50  15 -45 108 113 196 237  45  77
+blue      #268bd2  4/4 blue      33 #0087ff 55 -10 -45  38 139 210 205  82  82
+cyan      #2aa198  6/6 cyan      37 #00afaf 60 -35 -05  42 161 152 175  74  63
+green     #859900  2/2 green     64 #5f8700 60 -20  65 133 153   0  68 100  60
+*/
+const int solarized_colortable_original[16]={
+0x002b36, //base03
+0x073642, //base02
+0x586e75, //base01
+0x657b83, //base00
+0x839496, //base0
+0x93a1a1, //base1   (5)
+0xeee8d5, //base2
+0xfdf6e3, //base3
+0xb58900, //yellow
+0xcb4b16, //orange
+0xdc322f, //red     (10)
+0xd33682, //magenta
+0x6c71c4, //violet
+0x268bd2, //blue
+0x2aa198, //cyan
+0x859900, //green    (15)
+};
+
 
 
 //Tabla con los colores extra del Spectra.
@@ -2082,6 +2165,29 @@ void scr_init_layers_menu(void)
 
 }
 
+void scr_putpixel_layer_menu_no_zoom(int x,int y,int color)
+{
+	        int xzoom=x;
+        int yzoom=y;
+
+			
+
+
+      
+												int xdestino=xzoom;
+												int ydestino=yzoom;
+                        //scr_putpixel(xzoom+zx,yzoom+zy,color);
+												if (buffer_layer_menu==NULL) {
+													printf ("scr_putpixel_layer_menu NULL\n"); //?????
+												}
+												else buffer_layer_menu[ydestino*ancho_layer_menu_machine+xdestino]=color;
+
+												//Y hacer mix
+												screen_putpixel_mix_layers(xdestino,ydestino);   
+                
+        
+}
+
 void scr_putpixel_layer_menu(int x,int y,int color)
 {
 	        int xzoom=x*zoom_x;
@@ -2096,8 +2202,10 @@ void scr_putpixel_layer_menu(int x,int y,int color)
 												int xdestino=xzoom+zx;
 												int ydestino=yzoom+zy;
                         //scr_putpixel(xzoom+zx,yzoom+zy,color);
-												if (buffer_layer_menu==NULL) printf ("scr_putpixel_layer_menu NULL\n");
-												buffer_layer_menu[ydestino*ancho_layer_menu_machine+xdestino]=color;
+												if (buffer_layer_menu==NULL) {
+													printf ("scr_putpixel_layer_menu NULL\n"); //?????
+												}
+												else buffer_layer_menu[ydestino*ancho_layer_menu_machine+xdestino]=color;
 
 												//Y hacer mix
 												screen_putpixel_mix_layers(xdestino,ydestino);   
@@ -2357,11 +2465,11 @@ void scr_clear_layer_menu(void)
 		//printf ("Clearing layer size %d. buffer_layer_menu %p realloc layers %d\n",size,buffer_layer_menu,sem_screen_refresh_reallocate_layers);
 		//size/=16;
 
-		z80_int *initial_p;
+		//z80_int *initial_p;
 
 
 
-		initial_p=buffer_layer_menu;
+		//initial_p=buffer_layer_menu;
 		for (i=0;i<size;i++) {
 			//if (initial_p!=buffer_layer_menu) {
 			//if (buffer_layer_menu==NULL) {
@@ -2380,6 +2488,23 @@ void scr_clear_layer_menu(void)
 
 		//printf ("End clearing layer menu\n");
 
+}
+
+
+//Hacer un putpixel en la coordenada indicada pero haciendo tan gordo el pixel como diga zoom_level
+//Y sin lanzar zoom_x ni zoom_y
+//Usado en help keyboard
+void scr_putpixel_gui_no_zoom(int x,int y,int color,int zoom_level)
+{ 
+	//Hacer zoom de ese pixel si conviene
+	int incx,incy;
+	for (incy=0;incy<zoom_level;incy++) {
+		for (incx=0;incx<zoom_level;incx++) {
+			//printf("putpixel %d,%d\n",x+incx,y+incy);
+			scr_putpixel_layer_menu_no_zoom(x+incx,y+incy,color);
+			
+		}
+	}
 }
 
 //Hacer un putpixel en la coordenada indicada pero haciendo tan gordo el pixel como diga zoom_level
@@ -2469,6 +2594,97 @@ if (MACHINE_IS_Z88) {
 
 }
 
+//Retorna 0 si ese pixel no se debe mostrar debido a tamaño de caracter < 8
+int scr_putchar_menu_comun_zoom_reduce_charwidth(int bit)
+{
+
+	//Reducciones segun cada tamaño de letra
+	int saltar_pixeles_size7;
+	int saltar_pixeles_size6[2];
+	int saltar_pixeles_size5[3];
+
+
+	//Escalados por defecto
+	//Saltar primer pixel en caso tamaño 7
+	saltar_pixeles_size7=0;
+
+	//Saltar primer pixel y ultimo pixel en caso tamaño 6
+	saltar_pixeles_size6[0]=0;	
+	saltar_pixeles_size6[1]=7;	
+	
+	//Saltar primer pixel y ultimos pixeles en caso tamaño 5
+	saltar_pixeles_size5[0]=0;	
+	saltar_pixeles_size5[1]=6;
+	saltar_pixeles_size5[2]=7;	
+
+	//Segun tipo de letra
+	if (estilo_gui_activo==ESTILO_GUI_MSX)	{
+		saltar_pixeles_size7=7;
+
+		saltar_pixeles_size6[0]=7;	
+		saltar_pixeles_size6[1]=6;		
+
+		saltar_pixeles_size5[0]=7;	
+		saltar_pixeles_size5[1]=6;			
+		saltar_pixeles_size5[2]=5;			
+	}
+
+	if (estilo_gui_activo==ESTILO_GUI_Z88)	{
+		saltar_pixeles_size7=0;
+
+		saltar_pixeles_size6[0]=0;	
+		saltar_pixeles_size6[1]=1;	
+		
+		saltar_pixeles_size5[0]=0;	
+		saltar_pixeles_size5[1]=1;
+		saltar_pixeles_size5[2]=2;			
+	}	
+
+	if (estilo_gui_activo==ESTILO_GUI_SAM) {
+		saltar_pixeles_size7=0;
+
+		saltar_pixeles_size6[0]=0;	
+		saltar_pixeles_size6[1]=1;	
+		
+		saltar_pixeles_size5[0]=0;	
+		saltar_pixeles_size5[1]=1;
+		saltar_pixeles_size5[2]=7;			
+	}
+
+
+	//Los demas se ajustan bien al escalado por defecto
+
+
+	if (menu_char_width==8) {
+		return 1;
+	}
+
+	//Si 7, saltar un pixel
+	else if (menu_char_width==7) {
+		if (bit==saltar_pixeles_size7) {
+			return 0;
+		}
+	}
+
+	//Si 6, saltar dos pixeles
+	else if (menu_char_width==6) {
+		if (bit==saltar_pixeles_size6[0] || bit==saltar_pixeles_size6[1]) {
+			return 0;
+		}
+	}
+
+	//Si 5, saltar tres pixeles
+	else if (menu_char_width==5) {
+		if (bit==saltar_pixeles_size5[0] || bit==saltar_pixeles_size5[1] || bit==saltar_pixeles_size5[2]) {
+			return 0;
+		}
+	}	
+
+
+	//Por defecto
+	return 1;
+}
+
 
 //Muestra un caracter en pantalla, usado en menu
 //entrada: caracter
@@ -2476,10 +2692,10 @@ if (MACHINE_IS_Z88) {
 //inverse si o no
 //ink, paper
 //y valor de zoom
-void scr_putchar_menu_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,z80_byte tinta,z80_byte papel,int zoom_level)
+void scr_putchar_menu_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,int tinta,int papel,int zoom_level)
 {
 
-	z80_byte color;
+	int color;
   z80_byte bit;
   z80_byte line;
   z80_byte byte_leido;
@@ -2541,6 +2757,13 @@ void scr_putchar_menu_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,z
 
 		
 			//Ancho de caracter 8, 7 y 6 pixeles
+			if (scr_putchar_menu_comun_zoom_reduce_charwidth(bit)) {
+				scr_putpixel_gui_zoom(xfinal,yfinal,color,zoom_level);
+				px++;
+			}
+
+
+			/*
 			if (menu_char_width==8) {
 				scr_putpixel_gui_zoom(xfinal,yfinal,color,zoom_level);
 				px++;
@@ -2569,7 +2792,7 @@ void scr_putchar_menu_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,z
 					px++;
 				}
 			}
-
+			*/
 
 
     }
@@ -2577,9 +2800,9 @@ void scr_putchar_menu_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,z
 }
 
 
-void scr_putchar_footer_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,z80_byte tinta,z80_byte papel)
+void scr_putchar_footer_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,int tinta,int papel)
 {
-	        z80_byte color;
+	        int color;
         z80_byte bit;
         z80_byte line;
         z80_byte byte_leido;
@@ -2683,10 +2906,10 @@ void scr_putchar_footer_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse
 //ink, paper
 //si emula fast mode o no
 //y valor de zoom
-void old_scr_putchar_footer_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,z80_byte tinta,z80_byte papel)
+void old_scr_putchar_footer_comun_zoom(z80_byte caracter,int x,int y,z80_bit inverse,int tinta,int papel)
 {
 
-        z80_byte color;
+        int color;
         z80_byte bit;
         z80_byte line;
         z80_byte byte_leido;
@@ -2757,10 +2980,10 @@ void old_scr_putchar_footer_comun_zoom(z80_byte caracter,int x,int y,z80_bit inv
 //ink, paper
 //si emula fast mode o no
 //y valor de zoom
-void scr_putsprite_comun_zoom(z80_byte *puntero,int x,int y,z80_bit inverse,z80_byte tinta,z80_byte papel,z80_bit fast_mode,int zoom_level)
+void scr_putsprite_comun_zoom(z80_byte *puntero,int x,int y,z80_bit inverse,int tinta,int papel,z80_bit fast_mode,int zoom_level)
 {
 
-        z80_byte color;
+        int color;
         z80_byte bit;
         z80_byte line;
         z80_byte byte_leido;
@@ -2829,7 +3052,7 @@ void scr_putsprite_comun_zoom(z80_byte *puntero,int x,int y,z80_bit inverse,z80_
 
 
 //putsprite pero sin zoom
-void scr_putsprite_comun(z80_byte *puntero,int x,int y,z80_bit inverse,z80_byte tinta,z80_byte papel,z80_bit fast_mode)
+void scr_putsprite_comun(z80_byte *puntero,int x,int y,z80_bit inverse,int tinta,int papel,z80_bit fast_mode)
 {
 	scr_putsprite_comun_zoom(puntero,x,y,inverse,tinta,papel,fast_mode,1);
 }
@@ -4224,6 +4447,10 @@ void scr_refresca_pantalla_comun(void)
 
 
 
+
+
+
+
 void scr_mk14_linea(int x,int y,int longitud,int incx,int incy,int color)
 {
 	while (longitud) {
@@ -4584,7 +4811,7 @@ void load_screen(char *scrfile)
 
 }
 
-void save_screen(char *scrfile)
+void save_screen_scr(char *scrfile)
 {
 
                  if (MACHINE_IS_SPECTRUM) {
@@ -4628,9 +4855,55 @@ FILE *ptr_scrfile;
                         }
 
                         else {
-                                debug_printf (VERBOSE_ERR,"Screen saving only allowed on Spectrum models");
+                                debug_printf (VERBOSE_ERR,"Screen .scr saving only allowed on Spectrum models");
                         }
 
+
+}
+
+//Grabar pantalla segun si extension scr, pbm o bmp
+void save_screen(char *screen_save_file)
+{
+	if (!util_compare_file_extension(screen_save_file,"scr")) {
+		save_screen_scr(screen_save_file);
+	}
+
+	else if (!util_compare_file_extension(screen_save_file,"pbm")) {
+
+		if (!MACHINE_IS_SPECTRUM) {
+			debug_printf (VERBOSE_ERR,"Screen .pbm saving only allowed on Spectrum models");
+			return;
+        }
+
+		//Asignar buffer temporal
+		int longitud=6144;
+		z80_byte *buf_temp=malloc(longitud);
+		if (buf_temp==NULL) {
+				debug_printf(VERBOSE_ERR,"Error allocating temporary buffer");
+		}
+
+		//Convertir pantalla a sprite ahi
+		z80_byte *origen;
+		origen=get_base_mem_pantalla();
+		util_convert_scr_sprite(origen,buf_temp);
+
+		util_write_pbm_file(screen_save_file,256,192,8,buf_temp);
+
+		free(buf_temp);
+
+
+	}
+
+	else if (!util_compare_file_extension(screen_save_file,"bmp")) {
+
+		util_write_screen_bmp(screen_save_file);
+
+	}		
+
+	else {
+		debug_printf(VERBOSE_ERR,"Unsuported file type");
+		return;
+	} 
 
 }
 
@@ -4993,8 +5266,15 @@ void screen_store_scanline_rainbow_border_comun(z80_int *puntero_buf_rainbow,int
 	//Hay que recorrer el array del border para la linea actual
 	int final_border_linea=indice_border+screen_testados_linea;
 	for (;indice_border<final_border_linea;indice_border++) {
-		//obtenemos si hay cambio de border
-		border_leido=fullbuffer_border[indice_border];
+		//obtenemos si hay cambio de border. En tbblue puede que no esté activado
+		if (MACHINE_IS_TBBLUE && tbblue_store_scanlines_border.v==0) {
+			border_leido=255; 
+		}
+
+		else {
+			border_leido=fullbuffer_border[indice_border];
+		}
+
 		if (border_leido!=255) {
 
 			screen_border_last_color=border_leido;
@@ -5427,10 +5707,10 @@ void screen_store_scanline_rainbow_solo_display_16c(void)
         z80_int direccion;
         
 
-        z80_byte *screen;
+        //z80_byte *screen;
 
 
-		screen=get_base_mem_pantalla();
+		//screen=get_base_mem_pantalla();
 
 		direccion=screen_addr_table[(scanline_copia<<5)];
 
@@ -7046,6 +7326,8 @@ void screen_store_scanline_rainbow_solo_display(void)
 		return;
 	}
 
+
+
 	//si linea no coincide con entrelazado, volvemos
 	if (if_store_scanline_interlace(t_scanline_draw)==0) return;
 
@@ -7531,6 +7813,8 @@ void screen_store_scanline_rainbow_solo_border(void)
 		return;
 	}
 
+
+
 	if (MACHINE_IS_TSCONF) {
 		//se gestiona todo desde el solo_display
 		return;
@@ -7865,6 +8149,24 @@ void convertir_paleta(z80_int valor)
 
 }
 
+
+void convertir_color_spectrum_paleta_to_rgb(z80_int valor,int *r,int *g,int *b)
+{
+
+	//unsigned char valor_r,valor_g,valor_b;
+
+	//colores de tabla activa
+	int color=spectrum_colortable[valor];
+
+
+	*r=(color & 0xFF0000) >> 16;
+	*g=(color & 0x00FF00) >> 8;
+	*b= color & 0x0000FF;
+
+
+
+}
+
 /*
 	convertir_paleta(valor);
    fwrite( &buffer_rgb, 1, 3, fichero_out);
@@ -8164,7 +8466,7 @@ G  G   R   R   B   B
 #define GRAY_MODE_CONST_BRILLO 20
 
 
-	                for (i=0;i<16;i++) {
+	        for (i=0;i<16;i++) {
 				valorgris=(i&7)*GRAY_MODE_CONST;
 
 				if (i>=8) valorgris +=GRAY_MODE_CONST_BRILLO;
@@ -8173,7 +8475,7 @@ G  G   R   R   B   B
 
 				screen_set_colour_normal(i,(r<<16)|(g<<8)|b);
 
-	                }
+	        }
 
 			//El color 8 es negro, con brillo 1. Pero negro igual
 			screen_set_colour_normal(8,0);
@@ -8285,6 +8587,19 @@ G  G   R   R   B   B
 				VALOR_GRIS_A_R_G_B
 				screen_set_colour_normal(HEATMAP_INDEX_FIRST_COLOR+i,(r<<16)|(g<<8)|b);
 			}
+
+				//Colores Solarized. No los pasamos a grises estos
+				for (i=0;i<SOLARIZED_TOTAL_PALETTE_COLOURS;i++) {
+					screen_set_colour_normal(SOLARIZED_INDEX_FIRST_COLOR+i,solarized_colortable_original[i]);
+				}			
+
+
+				//Colores VDP9918
+				for (i=0;i<VDP_9918_TOTAL_PALETTE_COLOURS;i++) {
+					valorgris=i*16;
+					VALOR_GRIS_A_R_G_B
+					screen_set_colour_normal(VDP_9918_INDEX_FIRST_COLOR+i,(r<<16)|(g<<8)|b);					
+				}
 
 
 
@@ -8459,6 +8774,17 @@ Bit 6 GRN1 most  significant bit of green.
 					screen_set_colour_normal(HEATMAP_INDEX_FIRST_COLOR+i,colorheat);
 				}
 
+				//Colores Solarized
+				for (i=0;i<SOLARIZED_TOTAL_PALETTE_COLOURS;i++) {
+					screen_set_colour_normal(SOLARIZED_INDEX_FIRST_COLOR+i,solarized_colortable_original[i]);
+				}
+
+					
+
+				//Colores VDP 9918
+				for (i=0;i<VDP_9918_TOTAL_PALETTE_COLOURS;i++) {
+					screen_set_colour_normal(VDP_9918_INDEX_FIRST_COLOR+i,vdp9918_colortable_original[i]);
+				}
 
 
 		}
@@ -8567,6 +8893,10 @@ void screen_init_colour_table(void)
 	TODO: hacerlos en gris y tambien oscuros
 	Para ello, se genera tabla con forzado a gris, lo copio a tabla de grises, y luego se genera colores normales
 	*/
+
+	debug_printf (VERBOSE_INFO,"Creating colour tables for %d colours",EMULATOR_TOTAL_PALETTE_COLOURS);
+	if (EMULATOR_TOTAL_PALETTE_COLOURS>65535) cpu_panic("More than 65536 colours to allocate. This is fatal!");
+
 	int antes_screen_gray_mode=screen_gray_mode;
 	screen_gray_mode=7;
 	screen_init_colour_table_siguiente();
@@ -8749,6 +9079,9 @@ void cpu_loop_refresca_pantalla_return(void)
 
         //media de tiempo
         core_cpu_timer_refresca_pantalla_media=(core_cpu_timer_refresca_pantalla_media+core_cpu_timer_refresca_pantalla_difftime)/2;
+
+
+		TIMESENSOR_ENTRY_POST(TIMESENSOR_ID_core_cpu_timer_refresca_pantalla);
 }
 	
 
@@ -8758,6 +9091,8 @@ void cpu_loop_refresca_pantalla(void)
 	//Calcular tiempo usado en refrescar pantalla
 	timer_stats_current_time(&core_cpu_timer_refresca_pantalla_antes);
 
+	TIMESENSOR_ENTRY_PRE(TIMESENSOR_ID_core_cpu_timer_refresca_pantalla);
+
 	//Para calcular el tiempo entre frames. Idealmente 20 ms
 	//Diferencia tiempo
 	core_cpu_timer_each_frame_difftime=timer_stats_diference_time(&core_cpu_timer_each_frame_antes,&core_cpu_timer_each_frame_despues);
@@ -8765,6 +9100,9 @@ void cpu_loop_refresca_pantalla(void)
 	core_cpu_timer_each_frame_media=(core_cpu_timer_each_frame_media+core_cpu_timer_each_frame_difftime)/2;
 	//Siguiente tiempo
 	timer_stats_current_time(&core_cpu_timer_each_frame_antes);
+
+
+
 
 
 	if (rainbow_enabled.v) screen_add_watermark_rainbow();
@@ -8820,7 +9158,7 @@ void cpu_loop_refresca_pantalla(void)
 //Escribe texto en pantalla empezando por en x,y, gestionando salto de linea
 //de momento solo se usa en panic para xwindows y fbdev
 //ultima posicion y queda guardada en screen_print_y
-void screen_print(int x,int y,z80_byte tinta,z80_byte papel,char *mensaje)
+void screen_print(int x,int y,int tinta,int papel,char *mensaje)
 {
 	while (*mensaje) {
 		scr_putchar_menu(x++,y,*mensaje++,tinta,papel);
@@ -11488,7 +11826,9 @@ if (reinicia_ventana) {
 //refresco de pantalla, 2 veces, para que cuando haya modo interlaced o gigascreen y multitask on, se dibujen los dos frames, el par y el impar
 void all_interlace_scr_refresca_pantalla(void)
 {
+	//printf ("antes de scr_refresca_pantalla\n");
     scr_refresca_pantalla();
+	//printf ("despues de scr_refresca_pantalla\n");
     if (video_interlaced_mode.v || gigascreen_enabled.v) {
       interlaced_numero_frame++;
 			screen_switch_rainbow_buffer();
@@ -12183,12 +12523,12 @@ void screen_text_repinta_pantalla_chloe(void)
 
         z80_byte caracter;
         int x,y;
-        unsigned char inv;
+        //unsigned char inv;
 
         //int valor_get_pixel;
 
         //int parpadeo;
-				int brillo;
+				//int brillo;
 
         //char caracteres_artisticos[]=" ''\".|/r.\\|7_LJ#";
 
@@ -12204,8 +12544,8 @@ void screen_text_repinta_pantalla_chloe(void)
 
                         caracter=*chloe_screen;
 
-                        brillo=0;
-                        inv=0;
+                        //brillo=0;
+                        //inv=0;
 
                         /*
 
@@ -13275,7 +13615,7 @@ void sam_convert_mode3_char_to_bw(z80_byte *origen,z80_byte *buffer_letra,z80_by
 	//Si solo ha habido un color
 	//TODO. considerar colores de paleta, y no indexados como si fuesen siempre de spectrum
 	//TODO. no se considera brillo
-	z80_byte tinta,papel;
+	z80_byte papel,tinta;
 	if (inicial_1==-1) {
 		papel=tinta=inicial_0&7;
 	}
@@ -13382,7 +13722,7 @@ void sam_convert_mode2_char_to_bw(z80_byte *origen,z80_byte *buffer_letra,z80_by
         //Si solo ha habido un color
         //TODO. considerar colores de paleta, y no indexados como si fuesen siempre de spectrum
         //TODO. no se considera brillo
-        z80_byte tinta,papel;
+        z80_byte papel,tinta;
         if (color_tinta==-1) {
                 papel=tinta=color_papel&7;
         }
@@ -14164,9 +14504,17 @@ int screen_convert_rainbow_to_blackwhite(z80_int *source_bitmap,int source_width
 	//int bw_final;
 
 	int brillo=100-screen_text_brightness;
+	
+	int valor_uno=1;
+	int valor_cero=0;
+	
+	if (screen_text_all_refresh_pixel_invert.v) {
+	valor_uno=0;
+	valor_cero=1;
+	}
 
-	if (porc_gris>=brillo) return 1;
-	else return 0;
+	if (porc_gris>=brillo) return valor_uno;
+	else return valor_cero;
 
 
 }
@@ -14338,7 +14686,7 @@ void scr_refresca_pantalla_tsconf_text_textmode (void (*fun_color) (z80_byte col
 
         //z80_int offset_caracter;
 
-        z80_byte tinta,papel;
+        z80_byte papel,tinta;
 
         z80_byte atributo;
 
@@ -14648,3 +14996,77 @@ void disable_16c_mode(void)
 
 	pentagon_16c_mode_available.v ^=1;
 }
+
+
+
+void screen_render_bmpfile(z80_byte *mem,int indice_paleta_color,zxvision_window *ventana)
+{
+
+						//putpixel del archivo bmp
+			
+
+/*
+Name	Size	Offset	Description
+Header	
+ 	Signature	2 bytes	0000h	'BM'
+FileSize	4 bytes	0002h	File size in bytes
+reserved	4 bytes	0006h	unused (=0)
+DataOffset	4 bytes	000Ah	Offset from beginning of file to the beginning of the bitmap data
+
+ 	Size	4 bytes	000Eh	Size of InfoHeader =40 
+Width	4 bytes	0012h	Horizontal width of bitmap in pixels
+Height	4 bytes	0016h	Vertical height of bitmap in pixels
+*/		
+
+
+	//ancho y alto de la cabecera. maximo 16 bit
+						int ancho=mem[18] + 256 * mem[19];
+						int alto=mem[22] + 256 * mem[23];
+
+						//printf ("ancho: %d alto: %d\n",ancho,alto);
+
+
+						//118 bytes de cabecera ignorar
+						//Cuantos bytes de cabecera ignorar?
+
+/*
+						Name	Size	Offset	Description
+Header	
+ 	Signature	2 bytes	0000h	'BM'
+FileSize	4 bytes	0002h	File size in bytes
+reserved	4 bytes	0006h	unused (=0)
+DataOffset	4 bytes	000Ah	Offset from beginning of file to the beginning of the bitmap data
+*/
+						//Pillamos el offset como valor de 16 bits para simplificar
+
+						int offset_bmp=mem[10] + 256 * mem[11];
+						//printf ("offset pixeles: %d\n",offset_bmp);
+
+								int ancho_calculo=ancho;
+								//Nota: parece que el ancho tiene que ser par, para poder calcular el offset
+								//if ( (ancho_calculo % 2 ) !=0) ancho_calculo++;						
+
+						int x,y;
+						for (y=0;y<alto;y++) {
+							for (x=0;x<ancho;x++) {
+								//lineas empiezan por la del final en un bmp
+								//1 byte por pixel, color indexado
+			
+
+
+								int offset_final=(alto-1-y)*ancho_calculo + x + offset_bmp;
+
+								
+
+
+								//printf ("offset_final_ %d\n",offset_final);
+								z80_byte byte_leido=mem[offset_final];
+								z80_int color_final=indice_paleta_color+byte_leido;
+								//zxvision_putpixel(ventana,x,y,color_final);
+								zxvision_putpixel_no_zoom(ventana,x,y,color_final);
+							}
+						}
+						
+
+}
+

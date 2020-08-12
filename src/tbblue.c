@@ -43,6 +43,7 @@
 #include "multiface.h"
 #include "uartbridge.h"
 #include "chardevice.h"
+#include "settings.h"
 
 #define TBBLUE_MAX_SRAM_8KB_BLOCKS 224
 
@@ -58,6 +59,16 @@ z80_byte tbblue_extra_512kb_blocks=3;
 
 int tbblue_use_rtc_traps=1;
 
+//Establece numero de bloques extra de 512kb en base a memoria indicada en KB
+void tbblue_set_ram_blocks(int memoria_kb)
+{
+	if (memoria_kb>=1536) tbblue_extra_512kb_blocks=3;
+	else if (memoria_kb>=1024) tbblue_extra_512kb_blocks=2;
+	else if (memoria_kb>=512) tbblue_extra_512kb_blocks=1;
+	else tbblue_extra_512kb_blocks=0;
+
+	//printf ("tbblue_extra_512kb_blocks: %d\n",tbblue_extra_512kb_blocks);
+}
 
 //Autoactivar real video solo la primera vez que se entra en set_machine con maquina tbblue
 int tbblue_already_autoenabled_rainbow=0;
@@ -73,6 +84,8 @@ int tbblue_get_current_ram(void)
 	return 256+8*tbblue_return_max_extra_blocks();
 }
 
+
+
 //Punteros a los 8 bloques de 8kb de rom de spectrum
 z80_byte *tbblue_rom_memory_pages[8];
 
@@ -85,17 +98,210 @@ z80_byte *tbblue_memory_paged[8];
 //Si arranca rapido sin pasar por el proceso de boot. Va directamente a rom 48k
 z80_bit tbblue_fast_boot_mode={0};
 
+
 z80_bit tbblue_deny_turbo_rom={0};
 
+//Maximo turbo permitido al habilitar tbblue_deny_turbo_rom. Por defecto maximo 1X
+int tbblue_deny_turbo_rom_max_allowed=1;
+
+
+//
+//Inicio Variables, memoria etc de estado de la máquina. Se suelen guardar/cargar en snapshot ZSF
+//
+
+
+//'bootrom' takes '1' on hard-reset and takes '0' if there is any writing on the i/o port 'config1'. It can not be read.
+z80_bit tbblue_bootrom={1};
 
 //Copper
 z80_byte tbblue_copper_memory[TBBLUE_COPPER_MEMORY];
 
-//Indice a la posicion de 16 bits a escribir
-//z80_int tbblue_copper_index_write=0;
 
 //Indice al opcode copper a ejecutar
 z80_int tbblue_copper_pc=0;
+
+//Sprites
+
+//Paleta de 256 colores formato RGB9 RRRGGGBBB
+//Valores son de 9 bits por tanto lo definimos con z80_int que es de 16 bits
+//z80_int tbsprite_palette[256];
+
+
+//Diferentes paletas
+//Total:
+//     000 = ULA first palette
+//     100 = ULA secondary palette
+//     001 = Layer 2 first palette
+//    101 = Layer 2 secondary palette
+//     010 = Sprites first palette 
+//     110 = Sprites secondary palette
+//     011 = Tilemap first palette
+//     111 = Tilemap second palette
+//Paletas de 256 colores formato RGB9 RRRGGGBBB
+//Valores son de 9 bits por tanto lo definimos con z80_int que es de 16 bits
+z80_int tbblue_palette_ula_first[256];
+z80_int tbblue_palette_ula_second[256];
+z80_int tbblue_palette_layer2_first[256];
+z80_int tbblue_palette_layer2_second[256];
+z80_int tbblue_palette_sprite_first[256];
+z80_int tbblue_palette_sprite_second[256];
+z80_int tbblue_palette_tilemap_first[256];
+z80_int tbblue_palette_tilemap_second[256];
+
+
+
+
+
+//64 patterns de Sprites
+/*
+In the palette each byte represents the colors in the RRRGGGBB format, and the pink color, defined by standard 1110011, is reserved for the transparent color.
+*/
+//z80_byte tbsprite_patterns[TBBLUE_MAX_PATTERNS][TBBLUE_SPRITE_SIZE];
+z80_byte tbsprite_new_patterns[TBBLUE_SPRITE_ARRAY_PATTERN_SIZE];
+
+
+/*
+[0] 1st: X position (bits 7-0).
+[1] 2nd: Y position (0-255).
+[2] 3rd: bits 7-4 is palette offset, bit 3 is X MSB, bit 2 is X mirror, bit 1 is Y mirror and bit 0 is visible flag.
+[3] 4th: bits 7-6 is reserved, bits 5-0 is Name (pattern index, 0-63).
+[4] 5th: if 4bpp pattern, anchor, relative, etc
+*/
+z80_byte tbsprite_sprites[TBBLUE_MAX_SPRITES][TBBLUE_SPRITE_ATTRIBUTE_SIZE];
+
+//Indices al indicar paleta, pattern, sprites. Subindex indica dentro de cada pattern o sprite a que posicion (0..3 en sprites o 0..255 en pattern ) apunta
+//z80_byte tbsprite_index_palette;
+z80_byte tbsprite_index_pattern,tbsprite_index_pattern_subindex;
+z80_byte tbsprite_index_sprite,tbsprite_index_sprite_subindex;
+z80_byte tbsprite_nr_index_sprite;
+
+/*
+Port 0x303B, if read, returns some information:
+
+Bits 7-2: Reserved, must be 0.
+Bit 1: max sprites per line flag.
+Bit 0: Collision flag.
+Port 0x303B, if written, defines the sprite slot to be configured by ports 0x55 and 0x57, and also initializes the address of the palette.
+
+*/
+
+z80_byte tbblue_port_303b;
+
+
+//Asumimos 256 registros
+z80_byte tbblue_registers[256];
+
+//Ultimo registro seleccionado
+z80_byte tbblue_last_register;
+
+
+
+/* Informacion relacionada con Layer2. Puede cambiar en el futuro, hay que ir revisando info en web de Next
+
+Registros internos implicados:
+
+(R/W) 0x12 (18) => Layer 2 RAM page
+ bits 7-6 = Reserved, must be 0
+ bits 5-0 = SRAM page (point to page 8 after a Reset)
+
+(R/W) 0x13 (19) => Layer 2 RAM shadow page
+ bits 7-6 = Reserved, must be 0
+ bits 5-0 = SRAM page (point to page 11 after a Reset)
+
+(R/W) 0x14 (20) => Global transparency color
+  bits 7-0 = Transparency color value (Reset to 0xE3, after a reset)
+  (Note this value is 8-bit only, so the transparency is compared only by the MSB bits of the final colour)
+
+
+
+(R/W) 0x16 (22) => Layer2 Offset X
+  bits 7-0 = X Offset (0-255)(Reset to 0 after a reset)
+
+(R/W) 0x17 (23) => Layer2 Offset Y
+  bits 7-0 = Y Offset (0-191)(Reset to 0 after a reset)
+
+
+
+
+Posiblemente registro 20 aplica a cuando el layer2 esta por detras de pantalla de spectrum, y dice el color de pantalla de spectrum
+que actua como transparente
+Cuando layer2 esta encima de pantalla spectrum, el color transparente parece que es el mismo que sprites: TBBLUE_TRANSPARENT_COLOR 0xE3
+
+Formato layer2: 256x192, linear, 8bpp, RRRGGGBB (mismos colores que sprites), ocupa 48kb
+
+Se accede en modo escritura en 0000-3fffh mediante puerto:
+
+Banking in Layer2 is out 4667 ($123B)
+bit 0 = write enable, which changes writes from 0-3fff to write to layer2,
+bit 1 = Layer2 ON or OFF set=ON,
+bit 2 = ????
+bit 3 = Use register 19 instead of 18 to tell sram page
+bit 4 puts layer 2 behind the normal spectrum screen
+bit 6 and 7 are to say which 16K section is paged in,
+$03 = 00000011b Layer2 on and writable and top third paged in at $0000,
+$43 = 01000011b Layer2 on and writable and middle third paged in at $0000,
+$C3 = 11000011b Layer2 on and writable and bottom third paged in at $0000,  ?? sera 100000011b??? TODO
+$02 = 00000010b Layer2 on and nothing paged in. etc
+
+Parece que se mapea la pagina de sram indicada en registro 19
+
+*/
+
+
+/*
+
+IMPORTANT!!
+
+Trying some old layer2 demos that doesn't set register 19 is dangerous.
+To avoid problems, first do:
+out 9275, 19
+out 9531,32
+To set layer2 to the extra ram:
+0x080000 – 0x0FFFFF (512K) => Extra RAM
+
+Then load the demo program and will work
+
+*/
+
+z80_byte tbblue_port_123b;
+
+
+
+
+//
+//FIN Variables, memoria etc de estado de la máquina. Se suelen guardar/cargar en snapshot ZSF
+//
+
+//valor inicial para tbblue_port_123b en caso de fast boot mode
+int tbblue_initial_123b_port=-1;
+
+//Diferentes layers a componer la imagen final
+/*
+(R/W) 0x15 (21) => Sprite and Layers system
+  bit 7 - LoRes mode, 128 x 96 x 256 colours (1 = enabled)
+  bits 6-5 = Reserved, must be 0
+  bits 4-2 = set layers priorities:
+     Reset default is 000, sprites over the Layer 2, over the ULA graphics
+     000 - S L U
+     001 - L S U
+     010 - S U L
+     011 - L U S
+     100 - U S L
+     101 - U L S
+ */
+
+//Si en zona pantalla y todo es transparente, se pone un 0
+
+
+//Layers con el indice al color final en la paleta RGB9 (0..511)
+z80_int tbblue_layer_ula[TBBLUE_LAYERS_PIXEL_WIDTH];
+z80_int tbblue_layer_layer2[TBBLUE_LAYERS_PIXEL_WIDTH];
+z80_int tbblue_layer_sprites[TBBLUE_LAYERS_PIXEL_WIDTH];
+
+
+//Indice a la posicion de 16 bits a escribir
+//z80_int tbblue_copper_index_write=0;
+
 
 z80_byte tbblue_machine_id=8;
 
@@ -109,10 +315,18 @@ struct s_tbblue_machine_id_definition tbblue_machine_id_list[]=
 	{8,               "Emulators"},
 	{10,              "ZX Spectrum Next"},
 	{11,              "Multicore"},
+	{0xea,            "ZX DOS"},
 	{250,             "ZX Spectrum Next Antibrick"},
 
  	{255,""}
 };
+
+
+z80_byte tbblue_core_current_version_major=TBBLUE_CORE_DEFAULT_VERSION_MAJOR;
+z80_byte tbblue_core_current_version_minor=TBBLUE_CORE_DEFAULT_VERSION_MINOR;
+z80_byte tbblue_core_current_version_subminor=TBBLUE_CORE_DEFAULT_VERSION_SUBMINOR;
+
+////return (TBBLUE_CORE_VERSION_MAJOR<<4 | TBBLUE_CORE_VERSION_MINOR);
 
 //Obtiene posicion de escritura del copper
 z80_int tbblue_copper_get_write_position(void)
@@ -225,40 +439,40 @@ void tbblue_copper_next_opcode(void)
 	tbblue_copper_pc +=2;
 
   /*
-                                                        modos
-                                                               01 = Copper start, execute the list, then stop at last adress
+		modos
+		01 = Copper start, execute the list, then stop at last adress
        10 = Copper start, execute the list, then loop the list from start
        11 = Copper start, execute the list and restart the list at each frame
-                                                        */
+	*/
 
-                                                   //Si ha ido a posicion 0
-                                                   if (tbblue_copper_pc==TBBLUE_COPPER_MEMORY) {
-													   z80_byte copper_control_bits=tbblue_copper_get_control_bits();
-                                                           switch (copper_control_bits) {
-                                                                        case TBBLUE_RCCH_COPPER_STOP:
-																			//Se supone que nunca se estara ejecutando cuando el mode sea stop
-                                                                           tbblue_copper_set_stop();
-                                                                        break;
+	//Si ha ido a posicion 0
+	if (tbblue_copper_pc==TBBLUE_COPPER_MEMORY) {
+		z80_byte copper_control_bits=tbblue_copper_get_control_bits();
+			switch (copper_control_bits) {
+						case TBBLUE_RCCH_COPPER_STOP:
+							//Se supone que nunca se estara ejecutando cuando el mode sea stop
+							tbblue_copper_set_stop();
+						break;
 
-                                                                        case TBBLUE_RCCH_COPPER_RUN_LOOP:
-                                                                                //loop
-                                                                                tbblue_copper_pc=0;
-                                                                                //printf ("Reset copper on mode TBBLUE_RCCH_COPPER_RUN_LOOP\n");
-                                                                        break;
+						case TBBLUE_RCCH_COPPER_RUN_LOOP:
+								//loop
+								tbblue_copper_pc=0;
+								//printf ("Reset copper on mode TBBLUE_RCCH_COPPER_RUN_LOOP\n");
+						break;
 
-																		case TBBLUE_RCCH_COPPER_RUN_LOOP_RESET:
-                                                                                //loop
-                                                                                tbblue_copper_pc=0;
-                                                                                //printf ("Reset copper on mode TBBLUE_RCCH_COPPER_RUN_LOOP_RESET\n");
-                                                                        break;
+						case TBBLUE_RCCH_COPPER_RUN_LOOP_RESET:
+								//loop
+								tbblue_copper_pc=0;
+								//printf ("Reset copper on mode TBBLUE_RCCH_COPPER_RUN_LOOP_RESET\n");
+						break;
 
-                                                                        case TBBLUE_RCCH_COPPER_RUN_VBI:
-                                                                                //loop??
-                                                                                tbblue_copper_pc=0;
-                                                                                //printf ("Reset copper on mode RUN_VBI\n");
-                                                                        break;
-                                                           }
-												   }
+						case TBBLUE_RCCH_COPPER_RUN_VBI:
+								//loop??
+								tbblue_copper_pc=0;
+								//printf ("Reset copper on mode RUN_VBI\n");
+						break;
+			}
+	}
 
 }
 
@@ -634,59 +848,6 @@ int tbblue_get_current_raster_horiz_position(void)
 }
 
 
-//Sprites
-
-//Paleta de 256 colores formato RGB9 RRRGGGBBB
-//Valores son de 9 bits por tanto lo definimos con z80_int que es de 16 bits
-//z80_int tbsprite_palette[256];
-
-
-//Diferentes paletas
-//Total:
-//     000 = ULA first palette
-//     100 = ULA secondary palette
-//     001 = Layer 2 first palette
-//    101 = Layer 2 secondary palette
-//     010 = Sprites first palette 
-//     110 = Sprites secondary palette
-//     011 = Tilemap first palette
-//     111 = Tilemap second palette
-//Paletas de 256 colores formato RGB9 RRRGGGBBB
-//Valores son de 9 bits por tanto lo definimos con z80_int que es de 16 bits
-z80_int tbblue_palette_ula_first[256];
-z80_int tbblue_palette_ula_second[256];
-z80_int tbblue_palette_layer2_first[256];
-z80_int tbblue_palette_layer2_second[256];
-z80_int tbblue_palette_sprite_first[256];
-z80_int tbblue_palette_sprite_second[256];
-z80_int tbblue_palette_tilemap_first[256];
-z80_int tbblue_palette_tilemap_second[256];
-
-
-//Diferentes layers a componer la imagen final
-/*
-(R/W) 0x15 (21) => Sprite and Layers system
-  bit 7 - LoRes mode, 128 x 96 x 256 colours (1 = enabled)
-  bits 6-5 = Reserved, must be 0
-  bits 4-2 = set layers priorities:
-     Reset default is 000, sprites over the Layer 2, over the ULA graphics
-     000 - S L U
-     001 - L S U
-     010 - S U L
-     011 - L U S
-     100 - U S L
-     101 - U L S
- */
-
-//Si en zona pantalla y todo es transparente, se pone un 0
-//Layers con el indice al olor final en la paleta RGB9 (0..511)
-
-//borde izquierdo + pantalla + borde derecho, multiplicado por 2
-#define TBBLUE_LAYERS_PIXEL_WIDTH ((48+256+48)*2)
-
-z80_int tbblue_layer_ula[TBBLUE_LAYERS_PIXEL_WIDTH];
-z80_int tbblue_layer_layer2[TBBLUE_LAYERS_PIXEL_WIDTH];
-z80_int tbblue_layer_sprites[TBBLUE_LAYERS_PIXEL_WIDTH];
 
 /* 
 Clip window registers
@@ -729,19 +890,18 @@ Clip window registers
   4rd write = Y2 position
   The values are 0,159,0,255 after a Reset, Reads do not advance the clip position, The X coords are internally doubled (in 40x32 mode, quadrupled in 80x32)
 
-(W) 0x1C (28) => Clip Window control
-  bits 7-4 = Reserved, must be 0
-  bit 3 - reset the Tilemap clip index.
-  bit 2 - reset the ULA/LoRes clip index.
-  bit 1 - reset the sprite clip index.
-  bit 0 - reset the Layer 2 clip index.
-
-(R) 0x1C (28) => Clip Window control
-  (may change)
-  bits 7-6 = Tilemap clip index
-  bits 5-4 = Layer 2 clip index
-  bits 3-2 = Sprite clip index
-  bits 1-0 = ULA clip index
+0x1C (28) => Clip Window control
+(R) (may change)
+  bits 7:6 = Tilemap clip index
+  bits 5:4 = ULA/Lores clip index
+  bits 3:2 = Sprite clip index
+  bits 1:0 = Layer 2 clip index
+(W) (may change)
+  bits 7:4 = Reserved, must be 0
+  bit 3 = Reset the tilemap clip index
+  bit 2 = Reset the ULA/LoRes clip index
+  bit 1 = Reset the sprite clip index
+  bit 0 = Reset the Layer 2 clip index
 */
 
 z80_byte clip_windows[4][4];                    // memory array to store actual clip windows
@@ -754,12 +914,15 @@ void tbblue_inc_clip_window_index(const z80_byte index_mask) {
 }
 
 // shifts and masks how the clip-window index is stored in tbblue_registers[28]
-#define TBBLUE_CLIP_WINDOW_LAYER2_INDEX_SHIFT   4
+#define TBBLUE_CLIP_WINDOW_LAYER2_INDEX_SHIFT   0
 #define TBBLUE_CLIP_WINDOW_LAYER2_INDEX_MASK    (3<<TBBLUE_CLIP_WINDOW_LAYER2_INDEX_SHIFT)
+
 #define TBBLUE_CLIP_WINDOW_SPRITES_INDEX_SHIFT  2
 #define TBBLUE_CLIP_WINDOW_SPRITES_INDEX_MASK   (3<<TBBLUE_CLIP_WINDOW_SPRITES_INDEX_SHIFT)
-#define TBBLUE_CLIP_WINDOW_ULA_INDEX_SHIFT      0
+
+#define TBBLUE_CLIP_WINDOW_ULA_INDEX_SHIFT      4
 #define TBBLUE_CLIP_WINDOW_ULA_INDEX_MASK       (3<<TBBLUE_CLIP_WINDOW_ULA_INDEX_SHIFT)
+
 #define TBBLUE_CLIP_WINDOW_TILEMAP_INDEX_SHIFT  6
 #define TBBLUE_CLIP_WINDOW_TILEMAP_INDEX_MASK   (3<<TBBLUE_CLIP_WINDOW_TILEMAP_INDEX_SHIFT)
 
@@ -967,56 +1130,36 @@ Bit	Function
 
 }
 
-
-//64 patterns de Sprites
-/*
-In the palette each byte represents the colors in the RRRGGGBB format, and the pink color, defined by standard 1110011, is reserved for the transparent color.
-*/
-//z80_byte tbsprite_patterns[TBBLUE_MAX_PATTERNS][TBBLUE_SPRITE_SIZE];
-z80_byte tbsprite_new_patterns[TBBLUE_MAX_PATTERNS*TBBLUE_SPRITE_SIZE];
-
-int tbsprite_pattern_get_offset_index(z80_byte sprite,z80_byte index_in_sprite)
+//XXX indica desplazamiento de 1 pattern de 4bits
+int tbsprite_pattern_get_offset_index_4bpp(z80_byte sprite,int offset_1_pattern,z80_byte index_in_sprite)
 {
-	return sprite*TBBLUE_SPRITE_SIZE+index_in_sprite;
+	return offset_1_pattern*TBBLUE_SPRITE_4BPP_SIZE + sprite*TBBLUE_SPRITE_8BPP_SIZE+index_in_sprite;
 }
 
-z80_byte tbsprite_pattern_get_value_index(z80_byte sprite,z80_byte index_in_sprite)
+z80_byte tbsprite_pattern_get_value_index_4bpp(z80_byte sprite,int offset_1_pattern,z80_byte index_in_sprite)
 {
-	return tbsprite_new_patterns[tbsprite_pattern_get_offset_index(sprite,index_in_sprite)];
-}
-
-void tbsprite_pattern_put_value_index(z80_byte sprite,z80_byte index_in_sprite,z80_byte value)
-{
-	tbsprite_new_patterns[tbsprite_pattern_get_offset_index(sprite,index_in_sprite)]=value;
+	return tbsprite_new_patterns[tbsprite_pattern_get_offset_index_4bpp(sprite,offset_1_pattern,index_in_sprite)];
 }
 
 
-/*
-[0] 1st: X position (bits 7-0).
-[1] 2nd: Y position (0-255).
-[2] 3rd: bits 7-4 is palette offset, bit 3 is X MSB, bit 2 is X mirror, bit 1 is Y mirror and bit 0 is visible flag.
-[3] 4th: bits 7-6 is reserved, bits 5-0 is Name (pattern index, 0-63).
-[4] 5th: TODO!!!
-*/
-z80_byte tbsprite_sprites[TBBLUE_MAX_SPRITES][TBBLUE_SPRITE_ATTRIBUTE_SIZE];
 
-//Indices al indicar paleta, pattern, sprites. Subindex indica dentro de cada pattern o sprite a que posicion (0..3 en sprites o 0..255 en pattern ) apunta
-z80_byte tbsprite_index_palette;
-z80_byte tbsprite_index_pattern,tbsprite_index_pattern_subindex;
-z80_byte tbsprite_index_sprite,tbsprite_index_sprite_subindex;
-z80_byte tbsprite_nr_index_sprite;
+int tbsprite_pattern_get_offset_index_8bpp(z80_byte sprite,z80_byte index_in_sprite)
+{
+	return sprite*TBBLUE_SPRITE_8BPP_SIZE+index_in_sprite;
+}
 
-/*
-Port 0x303B, if read, returns some information:
+z80_byte tbsprite_pattern_get_value_index_8bpp(z80_byte sprite,z80_byte index_in_sprite)
+{
+	return tbsprite_new_patterns[tbsprite_pattern_get_offset_index_8bpp(sprite,index_in_sprite)];
+}
 
-Bits 7-2: Reserved, must be 0.
-Bit 1: max sprites per line flag.
-Bit 0: Collision flag.
-Port 0x303B, if written, defines the sprite slot to be configured by ports 0x55 and 0x57, and also initializes the address of the palette.
+void tbsprite_pattern_put_value_index_8bpp(z80_byte sprite,z80_byte index_in_sprite,z80_byte value)
+{
+	tbsprite_new_patterns[tbsprite_pattern_get_offset_index_8bpp(sprite,index_in_sprite)]=value;
+}
 
-*/
 
-z80_byte tbblue_port_303b;
+
 
 int tbsprite_is_lockstep()
 {
@@ -1024,7 +1167,8 @@ int tbsprite_is_lockstep()
 }
 
 
-void tbsprite_increment_index_303b() {	// increment the "port" index
+void tbsprite_increment_index_303b() {	
+	// increment the "port" index
 	tbsprite_index_sprite_subindex=0;
 	tbsprite_index_sprite++;
 	tbsprite_index_sprite %= TBBLUE_MAX_SPRITES;
@@ -1032,78 +1176,9 @@ void tbsprite_increment_index_303b() {	// increment the "port" index
 
 
 
-/* Informacion relacionada con Layer2. Puede cambiar en el futuro, hay que ir revisando info en web de Next
-
-Registros internos implicados:
-
-(R/W) 0x12 (18) => Layer 2 RAM page
- bits 7-6 = Reserved, must be 0
- bits 5-0 = SRAM page (point to page 8 after a Reset)
-
-(R/W) 0x13 (19) => Layer 2 RAM shadow page
- bits 7-6 = Reserved, must be 0
- bits 5-0 = SRAM page (point to page 11 after a Reset)
-
-(R/W) 0x14 (20) => Global transparency color
-  bits 7-0 = Transparency color value (Reset to 0xE3, after a reset)
-  (Note this value is 8-bit only, so the transparency is compared only by the MSB bits of the final colour)
 
 
 
-(R/W) 0x16 (22) => Layer2 Offset X
-  bits 7-0 = X Offset (0-255)(Reset to 0 after a reset)
-
-(R/W) 0x17 (23) => Layer2 Offset Y
-  bits 7-0 = Y Offset (0-191)(Reset to 0 after a reset)
-
-
-
-
-Posiblemente registro 20 aplica a cuando el layer2 esta por detras de pantalla de spectrum, y dice el color de pantalla de spectrum
-que actua como transparente
-Cuando layer2 esta encima de pantalla spectrum, el color transparente parece que es el mismo que sprites: TBBLUE_TRANSPARENT_COLOR 0xE3
-
-Formato layer2: 256x192, linear, 8bpp, RRRGGGBB (mismos colores que sprites), ocupa 48kb
-
-Se accede en modo escritura en 0000-3fffh mediante puerto:
-
-Banking in Layer2 is out 4667 ($123B)
-bit 0 = write enable, which changes writes from 0-3fff to write to layer2,
-bit 1 = Layer2 ON or OFF set=ON,
-bit 2 = ????
-bit 3 = Use register 19 instead of 18 to tell sram page
-bit 4 puts layer 2 behind the normal spectrum screen
-bit 6 and 7 are to say which 16K section is paged in,
-$03 = 00000011b Layer2 on and writable and top third paged in at $0000,
-$43 = 01000011b Layer2 on and writable and middle third paged in at $0000,
-$C3 = 11000011b Layer2 on and writable and bottom third paged in at $0000,  ?? sera 100000011b??? TODO
-$02 = 00000010b Layer2 on and nothing paged in. etc
-
-Parece que se mapea la pagina de sram indicada en registro 19
-
-*/
-
-
-/*
-
-IMPORTANT!!
-
-Trying some old layer2 demos that doesn't set register 19 is dangerous.
-To avoid problems, first do:
-out 9275, 19
-out 9531,32
-To set layer2 to the extra ram:
-0x080000 – 0x0FFFFF (512K) => Extra RAM
-
-Then load the demo program and will work
-
-*/
-
-z80_byte tbblue_port_123b;
-
-
-//valor inicial para tbblue_port_123b en caso de fast boot mode
-int tbblue_initial_123b_port=-1;
 
 int tbblue_write_on_layer2(void)
 {
@@ -1119,7 +1194,10 @@ int tbblue_is_active_layer2(void)
 
 int tbblue_get_offset_start_layer2_reg(z80_byte register_value)
 {
-	int offset=register_value &=63;
+	//since core3.0 the NextRegs 0x12 and 0x13 are 7bit.
+	int offset=register_value&127;
+	//due to 7bit the value can leak outside of 2MiB
+	// in HW the reads outside of SRAM module are "unspecified result", writes are ignored (!)	
 
 	offset*=16384;
 
@@ -1203,7 +1281,7 @@ void tbblue_reset_sprites(void)
 		int j;
 		for (j=0;j<256;j++) {
 			//tbsprite_patterns[i][j]=TBBLUE_DEFAULT_TRANSPARENT;
-			tbsprite_pattern_put_value_index(i,j,TBBLUE_DEFAULT_TRANSPARENT);
+			tbsprite_pattern_put_value_index_8bpp(i,j,TBBLUE_DEFAULT_TRANSPARENT);
 		}
 	}
 
@@ -1334,10 +1412,24 @@ done < /tmp/archivo_lista.txt
 
 void tbblue_out_port_sprite_index(z80_byte value)
 {
+	/*
+Port 0x303B (W)
+X S S S S S S S
+N6 X N N N N N N
+A write to this port has two effects.
+One is it selects one of 128 sprites for writing sprite attributes via port 0x57.
+The other is it selects one of 128 4-bit patterns in pattern memory for writing 
+sprite patterns via port 0x5B. The N6 bit shown is the least significant in the 7-bit 
+pattern number and should always be zero when selecting one of 64 8-bit patterns indicated by N.	
+	*/
 	//printf ("Out tbblue_out_port_sprite_index %02XH\n",value);
-	tbsprite_index_pattern=value%TBBLUE_MAX_PATTERNS;
-	tbsprite_index_pattern_subindex=value&0x80;
-	tbsprite_index_sprite=value%TBBLUE_MAX_SPRITES;
+	tbsprite_index_pattern=value % TBBLUE_MAX_PATTERNS;
+
+	//De esta manera permitimos escrituras de 4bpp patterns en "medio" de un pattern de 8bpp (256 / 2 = 128 = 0x80)
+	//casualmente (o no) nuestro incremento es de 128 y ese bit N6 está en la posicion de bit 7 = 128
+	tbsprite_index_pattern_subindex=value & 0x80;
+
+	tbsprite_index_sprite=value % TBBLUE_MAX_SPRITES;
 	tbsprite_index_sprite_subindex=0;
 }
 
@@ -1438,7 +1530,7 @@ void tbblue_write_palette_value_high8(z80_byte valor)
 
 	tbblue_set_value_palette_rw(indice,valor16);
 
-
+//printf ("Escribir paleta\n");
 
 
 }
@@ -1515,10 +1607,18 @@ void tbblue_write_palette_value_high8_low1(z80_byte valor)
 void tbblue_out_sprite_pattern(z80_byte value)
 {
 
+/*
+Once a pattern number is selected via port 0x303B, the 256-byte or 128-byte pattern can be written to this port. 
+The internal pattern pointer auto-increments after each write so as many sequential patterns as desired can be written. 
+The internal pattern pointer will roll over from pattern 127 to pattern 0 (4-bit patterns) or from pattern 63 to pattern 0 
+(8-bit patterns) automatically.
+->esto del rollover es automático. Siempre resetea a 64. La diferencia es que podemos escribir “en medio” de un pattern 
+de 256 (8 bit) cuando N6 es 1 (lo que indicaría un pattern de 128 - 4 bit). 
+Así también, si N6 es 0 puede ser pattern de 4 bits, aunque da igual. N6 lo tratamos siempre como “sumar 1/2 pattern”
+*/
 
 
-
-	tbsprite_pattern_put_value_index(tbsprite_index_pattern,tbsprite_index_pattern_subindex,value);
+	tbsprite_pattern_put_value_index_8bpp(tbsprite_index_pattern,tbsprite_index_pattern_subindex,value);
 	//tbsprite_patterns[tbsprite_index_pattern][tbsprite_index_pattern_subindex]=value;
 
 
@@ -1557,16 +1657,31 @@ void tbblue_out_sprite_sprite(z80_byte value)
 {
 	//printf ("Out tbblue_out_sprite_sprite. Index: %d subindex: %d %02XH\n",tbsprite_index_sprite,tbsprite_index_sprite_subindex,value);
 
+/*
+Once a sprite is selected via port 0x303B, 
+its attributes can be written to this port one byte after another. 
+Sprites can have either four or five attribute bytes and the internal attribute pointer 
+will move onto the next sprite after those four or five attribute bytes are written. 
+This means you can select a sprite via port 0x303B and write attributes for as many sequential sprites as desired. 
+The attribute pointer will roll over from sprite 127 to sprite 0.
+*/
 
 
-	//Indices al indicar paleta, pattern, sprites. Subindex indica dentro de cada pattern o sprite a que posicion (0..3 en sprites o 0..255 en pattern ) apunta
+	//Indices al indicar paleta, pattern, sprites. Subindex indica dentro de cada pattern o sprite a que posicion 
+	//(0..3/4 en sprites o 0..255 en pattern ) apunta
 	//z80_byte tbsprite_index_sprite,tbsprite_index_sprite_subindex;
 
 	tbsprite_sprites[tbsprite_index_sprite][tbsprite_index_sprite_subindex]=value;
-	if (3 == tbsprite_index_sprite_subindex && 0 == (value&0x40)) {			// 4-byte type, add 0 as fifth
-		tbsprite_sprites[tbsprite_index_sprite][++tbsprite_index_sprite_subindex]=0;
+	if (tbsprite_index_sprite_subindex == 3 && (value & 0x40) == 0) {			
+		// 4-byte type, add 0 as fifth
+		tbsprite_index_sprite_subindex++;
+		tbsprite_sprites[tbsprite_index_sprite][tbsprite_index_sprite_subindex]=0;
 	}
-	if (++tbsprite_index_sprite_subindex == TBBLUE_SPRITE_ATTRIBUTE_SIZE) {
+
+	tbsprite_index_sprite_subindex++;
+
+	// Fin de ese sprite
+	if (tbsprite_index_sprite_subindex == TBBLUE_SPRITE_ATTRIBUTE_SIZE) {
 		tbsprite_increment_index_303b();
 	}
 }
@@ -1661,12 +1776,25 @@ bits 7-0 = Set the index value. (0XE3 after a reset)
 
 }
 
-z80_byte tbsprite_do_overlay_get_pattern_xy(z80_byte index_pattern,z80_byte sx,z80_byte sy)
+z80_byte tbsprite_do_overlay_get_pattern_xy_8bpp(z80_byte index_pattern,z80_byte sx,z80_byte sy)
 {
 
 	//return tbsprite_patterns[index_pattern][sy*TBBLUE_SPRITE_WIDTH+sx];
-	return tbsprite_pattern_get_value_index(index_pattern,sy*TBBLUE_SPRITE_WIDTH+sx);
+	return tbsprite_pattern_get_value_index_8bpp(index_pattern,sy*TBBLUE_SPRITE_WIDTH+sx);
 }
+
+z80_byte tbsprite_do_overlay_get_pattern_xy_4bpp(z80_byte index_pattern,int offset_1_pattern,z80_byte sx,z80_byte sy)
+{
+	z80_byte valor=tbsprite_pattern_get_value_index_4bpp(index_pattern,offset_1_pattern, (sy*TBBLUE_SPRITE_WIDTH+sx)/2  );
+
+	if ( (sx % 2) == 0) valor=valor>>4;
+
+	valor &= 0xF;
+
+	return valor;
+
+}
+
 
 z80_int tbsprite_return_color_index(z80_byte index)
 {
@@ -1915,8 +2043,30 @@ If the display of the sprites on the border is disabled, the coordinates of the 
 							}
 
 
+							int sprite_es_4bpp=0;
+
+							int offset_4bpp_N6=0;
+
+							if (tbsprite_sprites[conta_sprites][3] & 64) {
+								//Pattern es de 5 bytes
+								if (tbsprite_sprites[conta_sprites][4] & 128) sprite_es_4bpp=1;
+
+								if (tbsprite_sprites[conta_sprites][4] & 64) offset_4bpp_N6=1;
+
+								
+
+								//TODO: Y8
+							}
+
 							for (i=0;i<TBBLUE_SPRITE_WIDTH;i++) {
-								z80_byte index_color=tbsprite_do_overlay_get_pattern_xy(index_pattern,sx,sy);
+								z80_byte index_color;
+
+								if (sprite_es_4bpp) {
+									index_color=tbsprite_do_overlay_get_pattern_xy_4bpp(index_pattern,offset_4bpp_N6,sx,sy);
+								}
+								else {
+									index_color=tbsprite_do_overlay_get_pattern_xy_8bpp(index_pattern,sx,sy);
+								}
 
 									//Si index de color es transparente, no hacer nada
 /*
@@ -1985,6 +2135,8 @@ void tbblue_out_port_layer2_value(z80_byte value)
 			*/
 			tbblue_registers[105] &= (255-128);
 			if (value&2) tbblue_registers[105]|=128;
+
+	//printf ("valor a 123b: %02XH\n",value);
 }
 
 
@@ -2008,8 +2160,7 @@ Bit 0: Collision flag.
 
 
 
-//'bootrom' takes '1' on hard-reset and takes '0' if there is any writing on the i/o port 'config1'. It can not be read.
-z80_bit tbblue_bootrom={1};
+
 
 //Puerto tbblue de maquina/mapeo
 /*
@@ -2060,50 +2211,13 @@ z80_bit tbblue_low_segment_writable={0};
 //z80_byte tbblue_port_24df;
 
 
-//Asumimos 256 registros
-z80_byte tbblue_registers[256];
 
-//Ultimo registro seleccionado
-z80_byte tbblue_last_register;
 
 
 void tbblue_init_memory_tables(void)
 {
 /*
 
-Primer bloque de ram: memoria interna de tbblue en principio no accesible por el spectrum:
-
-Mapeo viejo
-
-0x000000 – 0x01FFFF (128K) => DivMMC RAM
-0x020000 – 0x03FFFF (128K) => Layer2 RAM
-0x040000 – 0x05FFFF (128K) => ??????????
-0x060000 – 0x06FFFF (64K) => ESXDOS and Multiface RAM
-0x060000 – 0x063FFF (16K) => ESXDOS ROM
-0x064000 – 0x067FFF (16K) => Multiface ROM
-0x068000 – 0x06BFFF (16K) => Multiface extra ROM
-0x06c000 – 0x06FFFF (16K) => Multiface RAM
-0x070000 – 0x07FFFF (64K) => ZX Spectrum ROM
-
-Segundo bloque de ram: 512K, todo accesible para Spectrum. Se mapean 256 o 512 mediante bit 6 y 7 de puerto 32765
-0x080000 - 0x0FFFFF (512K) => Speccy RAM
-
-Luego 8 KB de rom de la fpga
-0x100000 - 0x101FFF
-
-Nuevo:
-
-0x000000 – 0x00FFFF (64K) => ZX Spectrum ROM
-0x010000 – 0x013FFF (16K) => ESXDOS ROM
-0x014000 – 0x017FFF (16K) => Multiface ROM
-0x018000 – 0x01BFFF (16K) => Multiface extra ROM
-0x01c000 – 0x01FFFF (16K) => Multiface RAM
-0x020000 – 0x05FFFF (256K) => divMMC RAM
-0x060000 – 0x07FFFF (128K) => ZX Spectrum RAM
-0x080000 – 0x0FFFFF (512K) => Extra RAM
-
-
-Nuevo oct 2017:
 
     0x000000 – 0x00FFFF (64K) => ZX Spectrum ROM
     0x010000 – 0x013FFF (16K) => ESXDOS ROM
@@ -2111,6 +2225,8 @@ Nuevo oct 2017:
     0x018000 – 0x01BFFF (16K) => Multiface extra ROM
     0x01c000 – 0x01FFFF (16K) => Multiface RAM
     0x020000 – 0x03FFFF (128K) => divMMC RAM
+
+
     0x040000 – 0x05FFFF (128K) => ZX Spectrum RAM			(16 paginas) 
     0x060000 – 0x07FFFF (128K) => Extra RAM				(16 paginas)
 
@@ -2119,6 +2235,23 @@ Nuevo oct 2017:
     0x180000 – 0xFFFFFF (512K) => 3rd Extra IC RAM (if present)		(64 paginas)
 
     0x200000 (2 MB)
+
+
+Nuevo mapeo para multiface:
+
+-- 0x000000 - 0x00FFFF (64K)  => ZX Spectrum ROM         A20:A16 = 00000
+   -- 0x010000 - 0x011FFF ( 8K)  => divMMC ROM              A20:A16 = 00001,000
+   -- 0x012000 - 0x013FFF ( 8K)  => unused                  A20:A16 = 00001,001
+   -- 0x014000 - 0x017FFF (16K)  => Multiface ROM,RAM       A20:A16 = 00001,01
+   -- 0x018000 - 0x01BFFF (16K)  => Alt ROM0 128k           A20:A16 = 00001,10
+   -- 0x01c000 - 0x01FFFF (16K)  => Alt ROM1 48k            A20:A16 = 00001,11
+   -- 0x020000 - 0x03FFFF (128K) => divMMC RAM              A20:A16 = 00010
+   -- 0x040000 - 0x05FFFF (128K) => ZX Spectrum RAM         A20:A16 = 00100
+   -- 0x060000 - 0x07FFFF (128K) => Extra RAM
+   -- 0x080000 - 0x0FFFFF (512K) => 1st Extra IC RAM (if present)
+   -- 0x100000 - 0x17FFFF (512K) => 2nd Extra IC RAM (if present)
+   -- 0x180000 - 0x1FFFFF (512K) => 3rd Extra IC RAM (if present)
+
 
 
 */
@@ -2138,7 +2271,7 @@ Nuevo oct 2017:
 		tbblue_ram_memory_pages[i]=&memoria_spectrum[indice];
 	}
 
-	//4 Paginas ROM
+	//4 Paginas ROM de 16kb (8 paginas de 8kb)
 	for (i=0;i<8;i++) {
 		indice=0+8192*i;
 		tbblue_rom_memory_pages[i]=&memoria_spectrum[indice];
@@ -2179,6 +2312,155 @@ void tbblue_set_rom_page_no_255(z80_byte segment)
 	debug_paginas_memoria_mapeadas[segment]=reg_value;
 }
 
+int tbblue_get_altrom(void)
+{
+/*
+0x8C (140) => Alternate ROM 
+(R/W) (hard reset = 0)
+IMMEDIATE
+bit 7 = 1 to enable alt rom
+bit 6 = 1 to make alt rom visible only during writes, otherwise replaces rom during reads
+bit 5 = 1 to lock ROM1 (48K rom)
+bit 4 = 1 to lock ROM0 (128K rom)
+AFTER SOFT RESET (copied into bits 7-4)
+bit 3 = 1 to enable alt rom
+bit 2 = 1 to make alt rom visible only during writes, otherwise replaces rom during reads
+bit 1 = 1 to lock ROM1 (48K rom)
+bit 0 = 1 to lock ROM0 (128K rom)
+*/
+
+/*
+   -- 0x018000 - 0x01BFFF (16K)  => Alt ROM0 128k           A20:A16 = 00001,10
+   -- 0x01c000 - 0x01FFFF (16K)  => Alt ROM1 48k            A20:A16 = 00001,11
+   */
+
+/*
+
+
+   nr_8c_altrom_lock_rom1 <= nr_8c_altrom(5);
+   nr_8c_altrom_lock_rom0 <= nr_8c_altrom(4);
+   ....
+
+   port_1ffd_rom <= port_1ffd_reg(2) & port_7ffd_reg(4);
+
+   ....
+
+      signal machine_type_config    : std_logic;
+   signal machine_type_48        : std_logic;
+   signal machine_type_128       : std_logic;
+   signal machine_type_p3        : std_logic;
+
+
+   machine_type_config <= '1' when nr_03_machine_type = "000" else '0';   -- 48k config
+   machine_type_48 <= '1' when nr_03_machine_type(2 downto 1) = "00" else '0';   -- 48k
+   machine_type_128 <= '1' when nr_03_machine_type = "010" or nr_03_machine_type = "100" else '0';  -- 128k or pentagon
+   machine_type_p3 <= '1' when nr_03_machine_type = "011" else '0';   -- +3
+
+(R/W) 0x03 (03) => Set machine type
+...
+bits 2-0 = Machine type (writable in config mode only):
+000 = Config mode
+001 = ZX 48K
+010 = ZX 128K/+2 (Grey)
+011 = ZX +2A-B/+3e/Next Native
+100 = Pentagon 128K      
+
+...
+   process (machine_type_48, machine_type_p3, nr_8c_altrom_lock_rom1, nr_8c_altrom_lock_rom0, port_1ffd_rom)
+   begin
+      if machine_type_48 = '1' then
+         sram_active_rom <= "00";
+         sram_alt_128 <= (not nr_8c_altrom_lock_rom1) and nr_8c_altrom_lock_rom0;
+
+
+      elsif machine_type_p3 = '1' then
+         if nr_8c_altrom_lock_rom1 = '1' or nr_8c_altrom_lock_rom0 = '1' then
+            sram_active_rom <= nr_8c_altrom_lock_rom1 & nr_8c_altrom_lock_rom0;
+            sram_alt_128 <= not nr_8c_altrom_lock_rom1;
+         else
+            sram_active_rom <= port_1ffd_rom;
+            sram_alt_128 <= not port_1ffd_rom(0);   -- behave like a 128k machine
+         end if;
+
+
+      else
+         if nr_8c_altrom_lock_rom1 = '1' or nr_8c_altrom_lock_rom0 = '1' then
+            sram_active_rom <= '0' & nr_8c_altrom_lock_rom1;
+            sram_alt_128 <= not nr_8c_altrom_lock_rom1;
+         else
+            sram_active_rom <= '0' & port_1ffd_rom(0);
+            sram_alt_128 <= not port_1ffd_rom(0);
+         end if;
+      end if;
+
+
+   end process;   
+
+   Acerca de sram_alt_128:
+Allen Albright Oh yeah -- the next is beginning with a +3 port implementation but it can still 
+behave as a 48k, 128k, pentagon and it does that by disabling port 0x1ffd when running that code. 
+So the hardware still internally operates as a +3 but when behaving as a 48k, 128k, pentagon it's not 
+possible to write to port 0x1ffd and the machine behaves like a 48k, 128k, pentagon.
+This enabling or disabling of hardware is done by nextzxos (or the user) when running legacy 
+programs through nextreg 0x85 - 0x82 and through nextreg 0x89 - 0x86. The latter "expansion bus decodes" 
+only come into force when the expansion bus is enabled, in which case the internal port decode and 
+the expansion bus decodes are ANDed together. For a 48k load, you'd turn off most things and change the 
+video timing in nextreg 0x03 to generate the 48k video frame.   
+
+-> O sea que quien lo entienda que me lo explique :(
+
+*/
+
+	int altrom;
+
+	/*
+bit 5 = 1 to lock ROM1 (48K rom)
+bit 4 = 1 to lock ROM0 (128K rom)
+
+altrom=0 -> ROM0
+altrom=1 -> ROM01
+*/
+
+			if ( (tbblue_registers[0x8c] & 32) == 32) {
+				//printf ("ROM1\n");
+				altrom=1;
+			}
+			//128k rom
+			else if ( (tbblue_registers[0x8c] & 16) == 16) {
+				altrom=0;
+				//printf ("ROM0\n");
+			}
+
+			//a 0 los dos . paginado +3.
+			else {
+				
+				z80_byte rom_entra=((puerto_32765>>4)&1);
+				altrom=rom_entra;	
+				//printf ("alt rom segun 7ffd (%d)\n",altrom);
+			}
+
+	return altrom;
+}
+
+
+int tbblue_get_altrom_offset_dir(int altrom,z80_int dir)
+{
+	int offset;
+	/*
+	   -- 0x018000 - 0x01BFFF (16K)  => Alt ROM0 128k           A20:A16 = 00001,10
+   -- 0x01c000 - 0x01FFFF (16K)  => Alt ROM1 48k            A20:A16 = 00001,11
+   */
+
+			if (altrom==1) {
+				offset=0x01c000+dir;
+			}
+			else {
+				offset=0x018000+dir;
+			}
+
+	return offset;
+}
+
 void tbblue_set_rom_page(z80_byte segment,z80_byte page)
 {
 	z80_byte tbblue_register=80+segment;
@@ -2186,7 +2468,30 @@ void tbblue_set_rom_page(z80_byte segment,z80_byte page)
 
 	if (reg_value==255) {
 		page=tbblue_get_limit_sram_page(page);
-		tbblue_memory_paged[segment]=tbblue_rom_memory_pages[page];
+
+		//Si esta altrom en read
+		//Altrom.
+		//bit 6 =0 , only for read. bit 6=1, only for write
+		if (  (tbblue_registers[0x8c] & 192) ==128)    {
+			
+			int altrom;
+
+			//TODO: tener en cuenta altrom si maquina es distinta de machine_type_p3,
+			//que es como en teoria lo estoy haciendo. Ver codigo vhdl para salir de dudas
+			altrom=tbblue_get_altrom();
+
+			//printf ("Enabling alt rom on read. altrom=%d\n",altrom);
+
+
+			int offset=tbblue_get_altrom_offset_dir(altrom,8192*segment);
+
+			tbblue_memory_paged[segment]=&memoria_spectrum[offset];
+
+		}
+
+		else tbblue_memory_paged[segment]=tbblue_rom_memory_pages[page];
+
+
 		debug_paginas_memoria_mapeadas[segment]=DEBUG_PAGINA_MAP_ES_ROM+page;
 	}
 	else {
@@ -2699,16 +3004,15 @@ void tbblue_set_emulator_setting_turbo(void)
 
 	//printf ("Setting turbo: value %d on pc %04XH\n",t,reg_pc);			
 
-	if (tbblue_deny_turbo_rom.v && reg_pc<16384) {
-		//printf ("denying cpu turbo change\n");
-		return;
-	}
-
-
 	if (t==0) cpu_turbo_speed=1;
 	else if (t==1) cpu_turbo_speed=2;
 	else if (t==2) cpu_turbo_speed=4;
 	else if (t==3) cpu_turbo_speed=8;
+
+	if (tbblue_deny_turbo_rom.v && reg_pc<16384) {
+		//Ver el maximo permitido
+		if (cpu_turbo_speed>tbblue_deny_turbo_rom_max_allowed) cpu_turbo_speed=tbblue_deny_turbo_rom_max_allowed;
+	}
 
 
 	cpu_set_turbo_speed();
@@ -2873,6 +3177,9 @@ Bit	Function
 
 	tbblue_registers[107]=0;
 
+
+	tbblue_registers[112]=0;
+
 	clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][0]=0;
 	clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][1]=255;
 	clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][2]=0;
@@ -2917,7 +3224,42 @@ void tbblue_reset(void)
   bit 0 = (R/W) Reading 1 indicates a Soft-reset. If written 1 causes a Soft Reset.
 	*/
 	tbblue_registers[2]=1;
-	
+
+
+
+
+ /*
+ 0x8C (140) => Alternate ROM
+ (R/W) (hard reset = 0)
+ IMMEDIATE
+   bit 7 = 1 to enable alt rom
+   bit 6 = 1 to make alt rom visible only during writes, otherwise replaces rom during reads
+   bit 5 = 1 to lock ROM1 (48K rom)
+   bit 4 = 1 to lock ROM0 (128K rom)
+ AFTER SOFT RESET (copied into bits 7-4)
+   bit 3 = 1 to enable alt rom
+   bit 2 = 1 to make alt rom visible only during writes, otherwise replaces rom during reads
+   bit 1 = 1 to lock ROM1 (48K rom)
+   bit 0 = 1 to lock ROM0 (128K rom)
+ The locking mechanism also applies if the alt rom is not enabled. For the +3 and zx next, if the two lock bits are not
+ zero, then the corresponding rom page is locked in place. Other models use the bits to preferentially lock the corresponding
+ 48K rom or the 128K rom.
+
+ */
+
+       z80_byte reg8c_low=tbblue_registers[0x8c];
+
+       //Moverlo a bits altos
+       reg8c_low = reg8c_low << 4;
+
+       //Quitar de origen los bits altos
+
+       tbblue_registers[0x8c] &=0xF;
+
+       //Y meterle los altos
+
+       tbblue_registers[0x8c] |=reg8c_low;	
+ 
 
 	tbblue_reset_common();
 
@@ -2947,6 +3289,9 @@ void tbblue_hard_reset(void)
 	tbblue_registers[7]=0;
 	tbblue_registers[8]=16;
 	tbblue_registers[9]=0;
+
+
+	tbblue_registers[0x8c]=0;
 
 	tbblue_reset_common();
 
@@ -3126,6 +3471,27 @@ z80_byte tbblue_get_register_port(void)
 	return tbblue_last_register;
 }
 
+void tbblue_splash_monitor_mode(void)
+{
+
+	char buffer_mensaje[100];
+
+	int refresco=50;
+
+	if (tbblue_registers[5] & 4) refresco=60;
+
+	int vga_mode=1;
+
+	if ( (tbblue_registers[17] & 7) ==7 ) vga_mode=0;
+
+	if (vga_mode) sprintf(buffer_mensaje,"Setting monitor VGA mode %d %d Hz",tbblue_registers[17] & 7,refresco);
+	else sprintf(buffer_mensaje,"Setting monitor HDMI mode %d Hz",refresco);
+
+
+
+	screen_print_splash_text_center(ESTILO_GUI_TINTA_NORMAL,ESTILO_GUI_PAPEL_NORMAL,buffer_mensaje);
+}
+
 void tbblue_get_string_palette_format(char *texto)
 {
 //if (value&128) screen_print_splash_text_center(ESTILO_GUI_TINTA_NORMAL,ESTILO_GUI_PAPEL_NORMAL,"Enabling lores video mode. 128x96 256 colours");
@@ -3267,6 +3633,94 @@ Bit	Function
 	//redundante
 }
 
+
+void tbblue_paging_128k_reg_142(void)
+{
+	z80_byte value=tbblue_registers[142];
+
+	/*
+	0x8E (142) => Spectrum 128K Memory Mapping
+(R/W)
+  bit 7 = port 0xdffd bit 0         \  RAM
+  bits 6:4 = port 0x7ffd bits 2:0   /  bank 0-15
+
+R bit 3 = 1
+W bit 3 = 1 to change RAM bank, 0 = no change to mmu6 / mmu7 / RAM bank in ports 0x7ffd, 0xdffd
+
+
+  bit 2 = port 0x1ffd bit 0            paging mode
+
+If bit 2 = paging mode = 0 (normal)
+  bit 1 = port 0x1ffd bit 2         \  ROM
+  bit 0 = port 0x7ffd bit 4         /  select
+
+If bit 2 = paging mode = 1 (special allRAM)
+  bit 1 = port 0x1ffd bit 2         \  all
+  bit 0 = port 0x1ffd bit 1         /  RAM
+
+Writes can affect all ports 0x7ffd, 0xdffd, 0x1ffd (in Profi mapping mode, bit 3 of port 0xdffd is unaffected)
+Writes always change the ROM / allRAM mapping
+Writes immediately change the current mmu mapping as if by port write
+	*/
+
+	z80_byte valor_final_puerto_32765=0;
+	z80_byte valor_final_puerto_8189=0;
+
+
+	//W bit 3 = 1 to change RAM bank, 0 = no change to mmu6 / mmu7 / RAM bank in ports 0x7ffd, 0xdffd
+	if (value & 8) {
+		valor_final_puerto_32765 |=(value>>4) & 7;
+	}
+
+	else {
+		//Conservar valor anterior de pagina ram
+		valor_final_puerto_32765=puerto_32765 & 7;
+	}
+
+
+	//bit 2 = port 0x1ffd bit 0            paging mode
+
+	//If bit 2 = paging mode = 1 (special allRAM)
+	if (value & 4) {
+		//All RAM
+		//printf ("all ram\n");
+		//sleep(2);
+
+		//bit 2 = port 0x1ffd bit 0            paging mode
+		valor_final_puerto_8189 |=1;
+
+  		//bit 1 = port 0x1ffd bit 2         \  all
+  		//bit 0 = port 0x1ffd bit 1         /  RAM
+		valor_final_puerto_8189 |=(value&3)<<1;
+
+
+		  
+	}
+
+	else {
+		//If bit 2 = paging mode = 0 (normal)
+		//bit 1 = port 0x1ffd bit 2         \  ROM
+		//bit 0 = port 0x7ffd bit 4         /  select
+		valor_final_puerto_8189 |=(value & 2 ? 4 : 0);
+		valor_final_puerto_32765 |=(value & 1 ? 16 : 0);
+	}
+
+
+	//printf ("Puerto 32765: %d puerto 8189: %d\n",valor_final_puerto_32765,valor_final_puerto_8189);
+
+
+	tbblue_out_port_32765(valor_final_puerto_32765);
+	tbblue_out_port_8189(valor_final_puerto_8189);
+
+	//TODO puerto 0xdffd
+
+
+		//R bit 3 = 1
+	//En lectura siempre a uno, por tanto metemos siempre ese bit a 1 en el registro
+	//lo hacemos al final del todo por si acaso nos da por leer antes de nuevo ese registro tbblue_registers[142];
+	tbblue_registers[142] |=8;
+}
+
 	
 //tbblue_last_register
 //void tbblue_set_value_port(z80_byte value)
@@ -3279,17 +3733,24 @@ void tbblue_set_value_port_position(z80_byte index_position,z80_byte value)
 
 
 
-	//printf ("register port %02XH value %02XH\n",tbblue_last_register,value);
+	//printf ("register port %02XH value %02XH\n",index_position,value);
 
+	z80_byte last_register_5=tbblue_registers[5];
 	z80_byte last_register_6=tbblue_registers[6];
 	z80_byte last_register_7=tbblue_registers[7];
 	z80_byte last_register_8=tbblue_registers[8];
+	z80_byte last_register_17=tbblue_registers[17];
 	z80_byte last_register_21=tbblue_registers[21];
 	z80_byte last_register_66=tbblue_registers[66];
 	z80_byte last_register_67=tbblue_registers[67];
 	z80_byte last_register_99=tbblue_registers[99];
+	
+	z80_byte aux_divmmc;
 
 	if (index_position==3) {
+
+			//printf ("Cambiando registro tipo maquina 3: valor: %02XH\n",value);
+
             //Controlar caso especial
             //(W) 0x03 (03) => Set machine type, only in IPL or config mode
             //   		bits 2-0 = Machine type:
@@ -3298,6 +3759,7 @@ void tbblue_set_value_port_position(z80_byte index_position,z80_byte value)
 
             if (!(machine_type==0 || tbblue_bootrom.v)) {
                 debug_printf(VERBOSE_DEBUG,"Can not change machine type (to %02XH) while in non config mode or non IPL mode",value);
+				//printf("Can not change machine type (to %02XH) while in non config mode or non IPL mode\n",value);
                 return;
             }
         }
@@ -3326,27 +3788,36 @@ void tbblue_set_value_port_position(z80_byte index_position,z80_byte value)
 
 		case 2:
 		/*
-		(R/W)	02 => Reset:
-					bits 7-3 = Reserved, must be 0
-					bit 2 = (R) Power-on reset
-					bit 1 = (R/W) if 1 Hard Reset
-					bit 0 = (R/W) if 1 Soft Reset
+0x02 (02) => Reset
+(R)
+  bit 7 = Indicates the reset signal to the expansion bus and esp is asserted
+  bits 6:2 = Reserved
+  bit 1 = Indicates the last reset was a hard reset
+  bit 0 = Indicates the last reset was a soft reset
+  * Only one of bits 1:0 will be set
+(W)
+  bit 7 = Assert and hold reset to the expansion bus and the esp wifi (hard reset = 0)
+  bits 6:2 = Reserved, must be 0
+  bit 1 = Generate a hard reset (reboot)
+  bit 0 = Generate a soft reset
+  * Hard reset has precedence
+  
 					*/
-
-						//tbblue_hardsoftreset=value;
-						if (value&1) {
-							//printf ("Doing soft reset due to writing to port 24D9H\n");
-							reg_pc=0;
-						}
 						if (value&2) {
-							//printf ("Doing hard reset due to writing to port 24D9H\n");
+							
 							tbblue_bootrom.v=1;
-							//printf ("----setting bootrom to 1. when writing register 2 and bit 1\n");
+							
 							tbblue_registers[3]=0;
-							//tbblue_config1=0;
+							
 							tbblue_set_memory_pages();
 							reg_pc=0;
 						}
+
+						//Hard reset has precedence. Entonces esto es un else, si hay hard reset, no haremos soft reset
+						else if (value&1) {
+							reg_pc=0;
+						}
+
 
 					break;
 
@@ -3419,6 +3890,11 @@ void tbblue_set_value_port_position(z80_byte index_position,z80_byte value)
 
 		break;
 
+		case 5:
+			if ((last_register_5&4)!=(value&4)) tbblue_splash_monitor_mode();
+		
+		break;
+
 		
 
 		case 6:
@@ -3464,6 +3940,46 @@ void tbblue_set_value_port_position(z80_byte index_position,z80_byte value)
 			if ( last_register_8 != value ) tbblue_set_emulator_setting_reg_8();
 
 		break;
+
+
+		case 9:
+		
+/*
+0x09 (09) => Peripheral 4 Setting
+(R/W)
+  bit 7 = Place AY 2 in mono mode (hard reset = 0)
+  bit 6 = Place AY 1 in mono mode (hard reset = 0)
+  bit 5 = Place AY 0 in mono mode (hard reset = 0)
+  bit 4 = Sprite id lockstep (nextreg 0x34 and port 0x303B are in lockstep) (soft reset = 0)
+  bit 3 = Reset divmmc mapram bit (port 0xe3 bit 6) (read returns 0)
+  bit 2 = 1 to silence hdmi audio (hard reset = 0)
+  bits 1:0 = Scanline weight
+    00 = scanlines off
+    01 = scanlines 50%
+    10 = scanlines 25%
+    11 = scanlines 12.5%
+
+*/		
+			
+			if (value & 8) {   
+				
+				aux_divmmc=	diviface_control_register;
+				
+				aux_divmmc &=(255-64);
+				
+				diviface_write_control_register(aux_divmmc);
+				
+				
+			}
+    
+   		
+			//printf ("out reg 9: %02XH\n",value);
+		break;
+
+
+		case 17:
+			if ((last_register_17&7)!=(value&7)) tbblue_splash_monitor_mode();
+		break;		
 
 		case 21:
 			//modo lores
@@ -3688,6 +4204,17 @@ Bit	Function
 		break;	
 
 
+		case 140:
+			//printf ("Write to 140 (8c) register value: %02XH PC=%X\n",value,reg_pc);
+			tbblue_set_memory_pages();
+		break;
+
+
+		case 142:
+			tbblue_paging_128k_reg_142();
+		break;
+
+
 		default:
 			/*if 
 			(
@@ -3831,6 +4358,11 @@ z80_byte tbblue_get_value_port_register(z80_byte registro)
 	(R) 0x01 (01) => Version (Nibble most significant = Major, Nibble less significant = Minor)
 	*/
 
+	//printf ("leer registro %02XH\n",registro);
+
+	z80_int *paleta;
+	z80_byte indice_paleta;
+
 	
 
 	switch(registro)
@@ -3870,7 +4402,8 @@ hardware numbers
 
   */
 		case 1:
-			return (TBBLUE_CORE_VERSION_MAJOR<<4 | TBBLUE_CORE_VERSION_MINOR);
+			//return (TBBLUE_CORE_VERSION_MAJOR<<4 | TBBLUE_CORE_VERSION_MINOR);
+			return (tbblue_core_current_version_major<<4 | tbblue_core_current_version_minor);
 		break;
 
 
@@ -3891,24 +4424,40 @@ Bit	Function
 		break;
 
 		case 0xE:
-			return TBBLUE_CORE_VERSION_SUBMINOR;
+			//return TBBLUE_CORE_VERSION_SUBMINOR;
+			return tbblue_core_current_version_subminor;
 		break;		
 
 		case 24:
 			//(W) 0x18 (24) => Clip Window Layer 2
             return clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][tbblue_get_clip_window_layer2_index()];
+		break;
 
 		case 25:
 			//((W) 0x19 (25) => Clip Window Sprites
             return clip_windows[TBBLUE_CLIP_WINDOW_SPRITES][tbblue_get_clip_window_sprites_index()];
+		break;
 
 		case 26:
 			//(W) 0x1A (26) => Clip Window ULA/LoRes
 			return clip_windows[TBBLUE_CLIP_WINDOW_ULA][tbblue_get_clip_window_ula_index()];
+		break;
 
 		case 27:
 			//(W) 0x1B (27) => Clip Window Tilemap
 			return clip_windows[TBBLUE_CLIP_WINDOW_TILEMAP][tbblue_get_clip_window_tilemap_index()];
+		break;
+
+		case 28:
+/*
+0x1C (28) => Clip Window control
+(R) (may change)
+  bits 7:6 = Tilemap clip index
+  bits 5:4 = ULA/Lores clip index
+  bits 3:2 = Sprite clip index
+  bits 1:0 = Layer 2 clip index
+*/		
+		break;
 
 		/*
 		(R) 0x1E (30) => Active video line (MSB)
@@ -3931,7 +4480,52 @@ Bit	Function
 		break;
 
 
+		case 65:
+		//lectura paleta 
+/*
+0x41 (65) => Palette Value (8 bit colour)
+(R/W)
+  bits 7:0 = Colour for the palette index selected by nextreg 0x40.
+    The format is RRRGGGBB -  the lower blue bit of the 9-bit colour will be the logical
+    OR of blue bits 1 and 0 of this 8-bit value.
+    After the write, the palette index is auto-incremented to the next index if the
+    auto-increment is enabled in nextreg 0x43.  Reads do not auto-increment.
+    Any other bits associated with the index will be zeroed.
+*/		
+			indice_paleta=tbblue_registers[64];
 
+			paleta=tbblue_get_palette_rw();	
+
+			return (paleta[indice_paleta]>>1) & 0xFF;
+		break;
+
+		case 68:
+		//lectura paleta
+/*
+0x44 (68) => Palette Value (9 bit colour)
+(R/W)
+  Two consecutive writes are needed to write the 9 bit colour
+  1st write:
+    bits 7:0 = RRRGGGBB
+  2nd write:
+    bits 7:1 = Reserved, must be 0
+    bit 0 = lsb B
+    If writing to an L2 palette
+    bit 7 = 1 for L2 priority colour, 0 for normal.
+      An L2 priority colour moves L2 above all layers.  If you need the same
+      colour in both priority and normal modes, you will need to have two
+      different entries with the same colour one with and one without priority.
+  After two consecutive writes the palette index is auto-incremented if
+  auto-increment is enabled in nextreg 0x43.
+  Reads only return the 2nd byte and do not auto-increment.
+*/		
+			indice_paleta=tbblue_registers[64];
+
+			paleta=tbblue_get_palette_rw();	
+
+			return paleta[indice_paleta] & 1;		
+		
+		break;		
 
 	}
 
@@ -3997,6 +4591,7 @@ struct s_tbblue_priorities_names tbblue_priorities_names[8]={
 	{ { "ULA&Tiles" ,  "Sprites"  ,  "Layer 2" } },
 	{ { "ULA&Tiles" ,  "Layer 2"  ,  "Sprites" } },
 
+//TODO:
 	{ { "Invalid" ,  "Invalid"  ,  "Invalid" } },
 	{ { "Invalid" ,  "Invalid"  ,  "Invalid" } },
 };
@@ -4013,6 +4608,10 @@ char *tbblue_get_string_layer_prio(int layer,z80_byte prio)
      011 - L U S
      100 - U S L
      101 - U L S
+
+	 TODO:
+	110 - (U|T)S(T|U)(B+L) Blending layer and Layer 2 combined, colours clamped to [0,7]
+    111 - (U|T)S(T|U)(B+L-5) Blending layer and Layer 2 combined, colours clamped to [0,7]
 */
 
 	//por si acaso. capa entre 0 y 7
@@ -4404,23 +5003,45 @@ If zero, the tilemap priority is either decided by attribute bit or in 512-tile-
 
 }
 
+/*
+int tbblue_tiles_512_mode(void)
+{
+	
+// (R/W) 0x6B (107) => Tilemap Control
+//   bit 7    = 1 to enable the tilemap
+//   bit 6    = 0 for 40x32, 1 for 80x32
+//   bit 5    = 1 to eliminate the attribute entry in the tilemap
+//   bit 4    = palette select
+//   bits 3-2 = Reserved set to 0
+//   bit 1    = 1 to activate 512 tile mode
+//   bit 0    = 1 to force tilemap on top of ULA
+// 
+// 512 tile mode is solely entered via bit 1.  Whether the ula is enabled or not makes no difference
+// 
+// when in 512 tile mode, the ULA is on top of the tilemap.  You can change this by setting bit 0	
+	
+
+	return tbblue_registers[0x6b] & 1;
+}
+*/
+
 
 //Devuelve el color del pixel dentro de un tilemap
 z80_byte tbblue_get_pixel_tile_xy_monocromo(int x,int y,z80_byte *puntero_this_tiledef)
 {
-	//4bpp
-	int offset_x=0;
-
-	//int pixel_a_derecha=x%2;
-
-	int offset_y=y; //Cada linea ocupa 1 bytes
-
-	int offset_final=offset_y+offset_x;
 
 
-	z80_byte byte_leido=puntero_this_tiledef[offset_final];
+	//Cada linea ocupa 1 bytes
 
+
+	z80_byte byte_leido=puntero_this_tiledef[y];
+
+
+
+	
 	return (byte_leido>> (7-x) ) & 0x1;
+
+
 
 }
 
@@ -4586,6 +5207,9 @@ the central 256×192 display. The X coordinates are internally doubled to cover 
 
 	int ula_over_tilemap;
 
+    // 0 when tilemap-over-ULA is enforced, 1 when attribute ULA-over-tilemap bit should be used
+    int ula_over_tilemap_mask = (tbblue_tilemap_control&1)^1;	
+
 	//tilemap_width=40;
 /*
 (R/W) 0x4C (76) => Transparency index for the tilemap
@@ -4604,6 +5228,11 @@ Defines the transparent colour index for tiles. The 4-bit pixels of a tile defin
 
 		
 
+
+/* Antiguo bloque. Mejorado en el fork de Peter Ped Helcmanovsky mas abajo
+
+
+
 	for (x=0;x<tilemap_width;x++) {
 		//TODO stencil mode
 		byte_first=*puntero_tilemap;
@@ -4615,27 +5244,27 @@ Defines the transparent colour index for tiles. The 4-bit pixels of a tile defin
                                         
 		int tnum=byte_first;
 
-/*
-  bits 15-12 : palette offset
-  bit     11 : x mirror
-  bit     10 : y mirror
-  bit      9 : rotate
-  bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number)
-  bits   7-0 : tile number
-  */                                      
+
+// bits 15-12 : palette offset
+//   bit     11 : x mirror
+//   bit     10 : y mirror
+//   bit      9 : rotate
+//   bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number)
+//   bits   7-0 : tile number
+//                                       
 
 
 		if (tbblue_bytes_per_tile==1) {
                                         
-/*
-                                                (R/W) 0x6C (108) => Default Tilemap Attribute
-  bits 7-4 = Palette Offset
-  bit 3    = X mirror
-  bit 2    = Y mirror
-  bit 1    = Rotate
-  bit 0    = ULA over tilemap
-             (bit 8 of tile id if the ULA is disabled)
-  */                                              
+
+//                                                 (R/W) 0x6C (108) => Default Tilemap Attribute
+//   bits 7-4 = Palette Offset
+//   bit 3    = X mirror
+//   bit 2    = Y mirror
+//   bit 1    = Rotate
+//   bit 0    = ULA over tilemap
+//             (bit 8 of tile id if the ULA is disabled)
+//                                                 
 			tpal=(tbblue_default_tilemap_attr)&0xF0;
 
 			xmirror=(tbblue_default_tilemap_attr>>3)&1;
@@ -4644,10 +5273,10 @@ Defines the transparent colour index for tiles. The 4-bit pixels of a tile defin
 
 			if (tbblue_if_ula_is_enabled() ) {
     
-/*                                            
-                                                108
-                                                  bit 0    = ULA over tilemap
-             (bit 8 of tile id if the ULA is disabled)*/
+                                           
+//                                                 108
+//                                                   bit 0    = ULA over tilemap
+//              (bit 8 of tile id if the ULA is disabled)
                                                 
 				ula_over_tilemap=tbblue_default_tilemap_attr &1;
 			}
@@ -4656,18 +5285,21 @@ Defines the transparent colour index for tiles. The 4-bit pixels of a tile defin
 				tnum |=(tbblue_default_tilemap_attr&1)<<8; // bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number)
 			}
 
+			//printf ("1 bytes por tile\n");
+
 		}
 
 		else {
+			//printf ("2 bytes por tile\n");
 																				
                                                 
-/*
-                                         bits 15-12 : palette offset
-  bit     11 : x mirror
-  bit     10 : y mirror
-  bit      9 : rotate
-  bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number)
-  */                                      
+
+//                                          bits 15-12 : palette offset
+//   bit     11 : x mirror
+//   bit     10 : y mirror
+//   bit      9 : rotate
+//   bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number)
+//                                       
 			tpal=(byte_second)&0xF0;
 			xmirror=(byte_second>>3)&1;
 			ymirror=(byte_second>>2)&1;
@@ -4677,9 +5309,9 @@ Defines the transparent colour index for tiles. The 4-bit pixels of a tile defin
 			//printf ("Color independiente. tpal:%d byte_second: %02XH\n",tpal,byte_second);
 
 			if (tbblue_if_ula_is_enabled() ) {
-        /* 
-        bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number) */
-                                                
+        //
+        //bit      8 : ULA over tilemap (if the ula is disabled, bit 8 of tile number) 
+        //                                        
 				ula_over_tilemap=byte_second &1;
 			}
 
@@ -4693,23 +5325,160 @@ Defines the transparent colour index for tiles. The 4-bit pixels of a tile defin
 
 
 		if (tbblue_tiles_are_monocrome()) {
-			offset_tiledef=tnum*TBBLUE_TILE_HEIGHT;
+			
 
-			//TODO: asumo que aqui no se usa rotacion. Pues si no, las letras en CP/M, en programa TERMINFO, salen rotadas
-			//Es esta suposicion correcta?
+			//TODO: mejorar este caso
+
+
+			//byte_second=*(puntero_tilemap-1);
+
+			xmirror=0;
+			ymirror=0;
 			rotate=0;
+
+
+			
+
+// bits 15-9: palette offset (7 bits)
+// bit 8 : ULA over tilemap (in 512 tile mode, bit 8 of the tile number)
+// bits 7-0 : tile number
+
+			if (tbblue_tiles_512_mode() ) {
+				//printf ("512 mode\n");
+
+				tnum=byte_first | ((byte_second&1)*256);
+				ula_over_tilemap=0;
+			}
+
+			else {
+				tnum=byte_first;
+				ula_over_tilemap=byte_second &1;
+			}
+
+
+			tpal=(byte_second >> 1) & 127;
+
+			//TODO: parche feo. no se porque, si no, cp/m se ven mal los colores.
+			tpal=(byte_second >> 3) & 31;
+
+			//madre mia que mal esta documentado esto.... sin rotar un bit a la derecha??? en fin
+			tpal=(byte_second)&0xFE;
+			
+			offset_tiledef=tnum*TBBLUE_TILE_HEIGHT;
+//printf ("tnum: %d off: %d\n",tnum,offset_tiledef);
+
+			
+// 			In text mode the interpretation of the tilemap entry changes.  Normally it's:
+
+// bits 15-12 : palette offset
+// bit 11 : x mirror
+// bit 10 : y mirror
+// bit 9 : rotate
+// bit 8 : ULA over tilemap (in 512 tile mode, bit 8 of the tile number)
+// bits 7-0 : tile number
+// 
+// but it changes to:
+// 
+// bits 15-9: palette offset (7 bits)
+// bit 8 : ULA over tilemap (in 512 tile mode, bit 8 of the tile number)
+// bits 7-0 : tile number
+// 
+// The tiles are defined like UDGs (1 bit per pixel) and that 1 bit is combined with 
+// the 7-bit palette offset to form the 8-bit pixel that gets looked up in the tilemap palette.
+			
 		}
 		else {
 			//4 bpp. cada tiledef ocupa 4 bytes * 8 = 32
 			offset_tiledef=tnum*(TBBLUE_TILE_WIDTH/2)*TBBLUE_TILE_HEIGHT;
 		}
 
-		//sumar posicion y
-		//offset_tiledef += linea_en_tile*4;
 
-		//tiledef
+FIN Antiguo bloque. Mejorado del fork de Peter Ped Helcmanovsky */
 
-		//printf ("tpal %d\n",tpal);		
+
+// Bloque mejorado del fork de Peter Ped Helcmanovsky
+
+        for (x=0;x<tilemap_width;x++) {
+                //TODO stencil mode
+                byte_first=*puntero_tilemap;
+                puntero_tilemap++;
+                if (tbblue_bytes_per_tile==2) {
+                        byte_second=*puntero_tilemap;
+                        puntero_tilemap++;
+                } else {
+                        byte_second = tbblue_default_tilemap_attr;
+                }
+
+                int tnum=byte_first;
+
+/*
+  bits 15-12 : palette offset
+  bit     11 : x mirror
+  bit     10 : y mirror
+  bit      9 : rotate
+  bit      8 : ULA over tilemap OR bit 8 of tile number (512 tile mode)
+  bits   7-0 : tile number
+  */
+
+                if (tbblue_tiles_are_monocrome()) {
+					//En modo texto:
+// bits 15-9: palette offset (7 bits)
+// bit 8 : ULA over tilemap (in 512 tile mode, bit 8 of the tile number)
+// bits 7-0 : tile number
+// 
+// The tiles are defined like UDGs (1 bit per pixel) and that 1 bit is combined with 
+// the 7-bit palette offset to form the 8-bit pixel that gets looked up in the tilemap palette.
+
+						//Que mal documentado esta el tema de paleta... no se rota bits a la derecha
+                        tpal=(byte_second)&0xFE;
+                        xmirror=0;
+                        ymirror=0;
+                        rotate=0;
+                } else {
+						//Que mal documentado esta el tema de paleta... no se rota bits a la derecha
+                        tpal=(byte_second)&0xF0;
+                        xmirror=(byte_second>>3)&1;
+                        ymirror=(byte_second>>2)&1;
+                        rotate=(byte_second>>1)&1;
+                }
+
+
+                if (tbblue_tilemap_control&2) {
+                        // 512 tile mode
+                        tnum |= (byte_second&1)<<8;
+                        ula_over_tilemap = ula_over_tilemap_mask;
+                } else {
+                        // 256 tile mode, "ULA over tilemap" bit used from attribute (plus "force tilemap")
+                        ula_over_tilemap = byte_second & ula_over_tilemap_mask;
+                }
+
+                //printf ("Color independiente. tpal:%d byte_second: %02XH\n",tpal,byte_second);
+
+                //Sacar puntero a principio tiledef.
+                int offset_tiledef;
+
+
+                if (tbblue_tiles_are_monocrome()) {
+                        offset_tiledef=tnum*TBBLUE_TILE_HEIGHT;
+                }
+                else {
+                        //4 bpp. cada tiledef ocupa 4 bytes * 8 = 32
+                        offset_tiledef=tnum*(TBBLUE_TILE_WIDTH/2)*TBBLUE_TILE_HEIGHT;
+                }
+
+                //sumar posicion y
+                //offset_tiledef += linea_en_tile*4;
+
+                //tiledef
+
+                //printf ("tpal %d\n",tpal);
+	
+
+
+//FIN del bloque mejorado del fork de Peter Ped Helcmanovsky
+
+
+
 
 		//Renderizar los 8 pixeles del tile
 		int pixel_tile;
@@ -4929,13 +5698,33 @@ void tbblue_render_layers_rainbow(int capalayer2,int capasprites)
 	z80_int fallbackcolour = RGB9_INDEX_FIRST_COLOR + tbblue_get_9bit_colour(tbblue_registers[74]);
 
 	int y;
-	int diferencia_border_tiles=screen_indice_inicio_pant-TBBLUE_TILES_BORDER;
+	int diferencia_border_tiles;
+
+	//diferencia_border_tiles=screen_indice_inicio_pant-TBBLUE_TILES_BORDER;
+	//Tamaño del border efectivo restando espacio usado por tiles/layer2 en border
+	diferencia_border_tiles=screen_borde_superior-TBBLUE_TILES_BORDER;
 
     y=t_scanline_draw-screen_invisible_borde_superior;
+
+
+	//y=t_scanline_draw-screen_indice_inicio_pant;
     if (border_enabled.v==0) y=y-screen_borde_superior;
 
-		if (y<diferencia_border_tiles || y>=(screen_indice_inicio_pant+192+TBBLUE_TILES_BORDER)) return; //Si estamos por encima o por debajo de la zona de tiles,
-		//que es la mas alta de todas las capas
+
+		//if (y<diferencia_border_tiles || y>=(screen_indice_inicio_pant+192+TBBLUE_TILES_BORDER)) {	
+
+		if (y<diferencia_border_tiles || y>=(screen_borde_superior+192+TBBLUE_TILES_BORDER)) {	
+			
+			//printf ("t_scanline_draw: %d y: %d diferencia_border_tiles: %d screen_indice_inicio_pant: %d screen_invisible_borde_superior: %d TBBLUE_TILES_BORDER: %d\n",
+			//	t_scanline_draw,y,diferencia_border_tiles,screen_indice_inicio_pant,screen_invisible_borde_superior,TBBLUE_TILES_BORDER);
+
+			//Si estamos por encima o por debajo de la zona de tiles/layer2,
+			//que es la mas alta de todas las capas
+
+			return; 
+
+		}
+		
 
 		//Calcular donde hay border
 		int final_border_superior=screen_indice_inicio_pant-screen_invisible_borde_superior;
@@ -5047,102 +5836,196 @@ void tbblue_render_layers_rainbow(int capalayer2,int capasprites)
 }
 
 
-void tbblue_do_layer2_overlay(void)
+char *tbblue_layer2_video_modes_names[]={
+	"256x192 8bpp",
+	"320x256 8bpp",
+	"640x256 4bpp",
+	"Unknown"
+};
+
+char *tbblue_get_layer2_mode_name(void)
+{
+		//Resolucion si 256x192x8, organizacion en scanlines, o las otras resoluciones que organizan en columnas
+		//00=256x192x8. 01=320x256x8, 10=640x256x4
+		int layer2_resolution=(tbblue_registers[112]>>4) & 3; 
+
+		return tbblue_layer2_video_modes_names[layer2_resolution];
+}
+
+
+void tbblue_do_layer2_overlay(int linea_render)
 {
 
 
-        //printf ("scan line de pantalla fisica (no border): %d\n",t_scanline_draw);
+		if (!tbblue_is_active_layer2() || tbblue_force_disable_layer_layer_two.v) return;
 
-        //linea que se debe leer
-        int scanline_copia=t_scanline_draw-screen_indice_inicio_pant;
-
-        //la copiamos a buffer rainbow
-        z80_int *puntero_buf_rainbow;
-        //esto podria ser un contador y no hace falta que lo recalculemos cada vez. TODO
-        int y;
-
-        y=t_scanline_draw-screen_invisible_borde_superior;
-        if (border_enabled.v==0) y=y-screen_borde_superior;
-
-        puntero_buf_rainbow=&rainbow_buffer[ y*get_total_ancho_rainbow() ];
-
-        puntero_buf_rainbow +=screen_total_borde_izquierdo*border_enabled.v;
+		//Resolucion si 256x192x8, organizacion en scanlines, o las otras resoluciones que organizan en columnas
+		//00=256x192x8. 01=320x256x8, 10=640x256x4
+		int layer2_resolution=(tbblue_registers[112]>>4) & 3; 
 
 
-        //int x,bit;
+		//Obtener offset paleta color
+		int palette_offset=tbblue_registers[112] & 15;
 
-        z80_byte byte_leido;
+		
 
-
-
-
-        //direccion=screen_addr_table[(scanline_copia<<5)];
-
-		//Inicializar puntero a layer2 de tbblue, irlo incrementando a medida que se ponen pixeles
-		//Layer2 siempre se dibuja desde registro que indique pagina 18. Registro 19 es un backbuffer pero siempre se dibuja desde 18
-		//int tbblue_layer2_offset=tbblue_registers[18]&63;
-
-		//tbblue_layer2_offset*=16384;
-
-
-
+		//Obtener inicio pantalla layer2
 		int tbblue_layer2_offset=tbblue_get_offset_start_layer2();
 
 
+		//Scroll vertical
+
+/*
+(R/W) 0x17 (23) => Layer2 Offset Y
+  bits 7-0 = Y Offset (0-191)(Reset to 0 after a reset)
+*/		
 		//Mantener el offset y en 0..191
 		z80_byte tbblue_reg_23=tbblue_registers[23]; 
 
-		int offset_scroll=tbblue_reg_23+scanline_copia;
-		offset_scroll %=192;
+
+		int offset_scroll=tbblue_reg_23+linea_render;
+
+		if (layer2_resolution) {
+			offset_scroll %=256;
+			tbblue_layer2_offset +=offset_scroll;
+		}
+
+		else {
+			offset_scroll %=192;
+			tbblue_layer2_offset +=offset_scroll*256;
+		}
 
 
-		tbblue_layer2_offset +=offset_scroll*256;
 
-		z80_byte tbblue_reg_22=tbblue_registers[22];
-
+		//Scroll horizontal
 /*
+
 (R/W) 22 => Layer2 Offset X
   bits 7-0 = X Offset (0-255)(Reset to 0 after a reset)
-
-(R/W) 0x17 (23) => Layer2 Offset Y
-  bits 7-0 = Y Offset (0-191)(Reset to 0 after a reset)
+0x71 (113) => Layer 2 X Scroll MSB
+(R/W)
+   bits 7:1 = Reserved, must be 0
+   bit 0 = MSB of scroll amount		
 */
 
+		int tbblue_reg_22=tbblue_registers[22] + (tbblue_registers[113]&1)*256;
 
 
+
+		//Valor final de scroll x, acotar a valores validos
+		if (layer2_resolution) {
+			tbblue_reg_22 %=320;
+		}
+
+		else {
+			tbblue_reg_22 %=256;
+		}
+
+
+		//Para la gestión de la posicion x del pixel
+		int pos_x_origen=tbblue_reg_22;
+
+		
+
+		//Inicio de la posicion en el layer final
 		int posicion_array_layer=0;
 
-		posicion_array_layer +=screen_total_borde_izquierdo*border_enabled.v*2; //doble de ancho
+
+		int borde_no_escribible=screen_total_borde_izquierdo;
+		if (layer2_resolution>0) borde_no_escribible-=TBBLUE_LAYER2_12_BORDER;
+
+		posicion_array_layer +=borde_no_escribible*2; //doble de ancho
 
 		int posx;
 
-       	for (posx=0;posx<256;posx++) {
+		//Total pixeles por defecto
+		int total_x=256;
+
+		
+		int clip_min=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][0];
+		int clip_max=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][1];
+
+		if (layer2_resolution) {
+			total_x +=TBBLUE_LAYER2_12_BORDER*2;
+
+			//Se multiplica por 2 siempre en estas resoluciones de 320x256 y 640x256
+			clip_min *=2;
+			clip_max *=2;			
+
+		}
+
+
+       	for (posx=0;posx<total_x;posx++) {
 				
 
-	
-				//Capa layer2
-				if (tbblue_is_active_layer2() && !tbblue_force_disable_layer_layer_two.v) {
-					if (posx>=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][0] && posx<=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][1] ) {
+			//printf ("posx: %d pos_x_origen: %d\n",posx,pos_x_origen);
+				
+			if (posx>=clip_min && posx<=clip_max ) {
+			
+				int offset_pixel;
 
-						z80_byte color_layer2=memoria_spectrum[tbblue_layer2_offset+tbblue_reg_22];
-						z80_int final_color_layer2=tbblue_get_palette_active_layer2(color_layer2);
+				z80_byte pixel_izq,pixel_der;
 
-						//Ver si color resultante es el transparente de ula, y cambiarlo por el color transparente ficticio
-						if (tbblue_si_transparent(final_color_layer2)) final_color_layer2=TBBLUE_SPRITE_TRANS_FICT;
-
-
-						tbblue_layer_layer2[posicion_array_layer]=final_color_layer2;
-						tbblue_layer_layer2[posicion_array_layer+1]=final_color_layer2; //doble de ancho
-					}
+				if (layer2_resolution) {
+					offset_pixel=tbblue_layer2_offset+pos_x_origen*256;
 				}
 
-				posicion_array_layer+=2; //doble de ancho
+				else {
+					offset_pixel=tbblue_layer2_offset+pos_x_origen;
+				}
 
-           	    byte_leido=byte_leido<<1;
+
+				offset_pixel &=0x1FFFFF;
+
+
 				
-				tbblue_reg_22++;
+
+				z80_byte byte_leido=memoria_spectrum[offset_pixel];
+
+				if (layer2_resolution==2) {
+					pixel_izq=(byte_leido>>4) & 0xF;
+					pixel_der=(byte_leido   ) & 0xF;					
+
+				}
+
+				else {
+					pixel_izq=byte_leido;
+					pixel_der=pixel_izq;
+				}
+
+				z80_int final_color_layer2_izq=tbblue_get_palette_active_layer2(pixel_izq+palette_offset);
+
+				//Ver si color resultante es el transparente de ula, y cambiarlo por el color transparente ficticio
+				if (tbblue_si_transparent(final_color_layer2_izq)) final_color_layer2_izq=TBBLUE_SPRITE_TRANS_FICT;
 
 
+				z80_int final_color_layer2_der=tbblue_get_palette_active_layer2(pixel_der+palette_offset);
+
+				//Ver si color resultante es el transparente de ula, y cambiarlo por el color transparente ficticio
+				if (tbblue_si_transparent(final_color_layer2_der)) final_color_layer2_der=TBBLUE_SPRITE_TRANS_FICT;		
+
+				tbblue_layer_layer2[posicion_array_layer]=final_color_layer2_izq;
+				tbblue_layer_layer2[posicion_array_layer+1]=final_color_layer2_der;
+
+			}
+
+			//Este incremento se tiene que hacer siempre fuera, para que se aplique siempre, se haga o no clipping
+			posicion_array_layer+=2;
+
+
+
+			//else {
+			//	printf ("fuera rango\n");
+			//}
+
+						
+	
+			//Siguiente posicion
+			pos_x_origen++;
+			if (pos_x_origen>=total_x) {
+				pos_x_origen=0;
+			}
+				
 
 	    }
 
@@ -5362,9 +6245,19 @@ bits 7-0 = Y Offset (0-191)(Reset to 0 after a reset)
 
 			//Modo sin scroll vertical. Permite scroll horizontal. Es modo rainbow
 
-			byte_leido=puntero_buffer_atributos[indice_origen_bytes++];
+			
 
-			attribute=puntero_buffer_atributos[indice_origen_bytes++];
+			//Pero si no tenemos scanline
+			if (tbblue_store_scanlines.v==0) {
+				byte_leido=screen[direccion+pos_no_rainbow_pix_x];
+				attribute=screen[dir_atributo+pos_no_rainbow_pix_x];	
+				indice_origen_bytes+=2;
+			}
+
+			else {
+				byte_leido=puntero_buffer_atributos[indice_origen_bytes++];
+				attribute=puntero_buffer_atributos[indice_origen_bytes++];
+			}
 
 		}
 
@@ -5519,7 +6412,7 @@ void tbblue_do_ula_lores_overlay()
 
 }
 
-//Guardar en buffer rainbow la linea actual. Para Spectrum. solo display
+//Guardar en buffer rainbow la linea actual. 
 //Tener en cuenta que si border esta desactivado, la primera linea del buffer sera de display,
 //en cambio, si border esta activado, la primera linea del buffer sera de border
 void screen_store_scanline_rainbow_solo_display_tbblue(void)
@@ -5529,9 +6422,10 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
 	if (if_store_scanline_interlace(t_scanline_draw)==0) return;
 
 	
+	//48% cpu en welcome screen. Alternativa mas lenta sin memfill
 
+	/*
 	int i;
-
 	z80_int *clear_p_ula=tbblue_layer_ula;
 	z80_int *clear_p_layer2=tbblue_layer_layer2;
 	z80_int *clear_p_sprites=tbblue_layer_sprites;
@@ -5540,7 +6434,7 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
 
 		//Esto es un pelin mas rapido hacerlo asi, con punteros e incrementarlos, en vez de indices a array
 		*clear_p_ula=TBBLUE_SPRITE_TRANS_FICT;
-		//*clear_p_layer2=TBBLUE_TRANSPARENT_REGISTER_9;
+		// *clear_p_layer2=TBBLUE_TRANSPARENT_REGISTER_9;
 		*clear_p_layer2=TBBLUE_SPRITE_TRANS_FICT;
 		*clear_p_sprites=TBBLUE_SPRITE_TRANS_FICT;
 
@@ -5549,6 +6443,23 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
 		clear_p_sprites++;
 
 	}
+	*/
+
+	//Alternativa con memfill. Esto solo se puede hacer dado que TBBLUE_SPRITE_TRANS_FICT=65535=0xFFFF y por tanto escribe
+	//dos bytes iguales
+	//46% cpu en welcome screen
+
+	//Por si acaso en un futuro cambia ese valor
+	if (TBBLUE_SPRITE_TRANS_FICT!=65535) cpu_panic("Changed transparent value. Can not do fast layer clear");
+
+	//Tenemos que escribir en array de z80_int (2 bytes)
+	int tamanyo_clear=TBBLUE_LAYERS_PIXEL_WIDTH*2;
+	memset(tbblue_layer_ula,0xFF,tamanyo_clear);
+	memset(tbblue_layer_layer2,0xFF,tamanyo_clear);
+	memset(tbblue_layer_sprites,0xFF,tamanyo_clear);
+	
+
+
 
 	//int bordesupinf=0;
 
@@ -5559,7 +6470,7 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
   	//En zona visible pantalla (no borde superior ni inferior)
   	if (t_scanline_draw>=screen_indice_inicio_pant && t_scanline_draw<screen_indice_fin_pant) {
 
-			int scanline_copia=t_scanline_draw-screen_indice_inicio_pant;
+			//int scanline_copia=t_scanline_draw-screen_indice_inicio_pant;
 
 
 			int tbblue_lores=tbblue_registers[0x15] & 128;
@@ -5572,7 +6483,7 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
 
 		//Overlay de layer2
 							//Capa layer2
-				if (tbblue_is_active_layer2() && !tbblue_force_disable_layer_layer_two.v) {
+				/*if (tbblue_is_active_layer2() && !tbblue_force_disable_layer_layer_two.v) {
 					if (scanline_copia>=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][2] && scanline_copia<=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][3]) {
 						capalayer2=1;
 					
@@ -5581,7 +6492,7 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
 								tbblue_reveal_layer_draw(tbblue_layer_layer2);
 						}
 					}
-				}
+				}*/
 
 	}
 
@@ -5591,7 +6502,56 @@ void screen_store_scanline_rainbow_solo_display_tbblue(void)
 
 	//Aqui puede ser borde superior o inferior
 
-    
+
+
+
+		//Overlay de layer2
+		//Capa layer2
+				if (tbblue_is_active_layer2() && !tbblue_force_disable_layer_layer_two.v) {
+					int y_layer2=t_scanline_draw; //0..63 es border (8 no visibles);
+					int border_no_visible=screen_indice_inicio_pant-TBBLUE_LAYER2_12_BORDER;
+
+
+					int layer2_resolution=(tbblue_registers[112]>>4) & 3; 
+
+					if (layer2_resolution>0) {
+						y_layer2 -=border_no_visible;
+					}
+					else {
+						y_layer2 -=screen_indice_inicio_pant;
+					}
+
+					int dibujar=0;
+
+
+					if (layer2_resolution==0) {
+						if (t_scanline_draw>=screen_indice_inicio_pant && t_scanline_draw<screen_indice_fin_pant) {
+							if (y_layer2>=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][2] && y_layer2<=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][3]) {
+								dibujar=1;
+							}
+						}
+					}
+
+					else if (y_layer2>=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][2] && y_layer2<=clip_windows[TBBLUE_CLIP_WINDOW_LAYER2][3]) {
+						dibujar=1;
+					}
+
+					if (dibujar) {
+						capalayer2=1;
+					
+						tbblue_do_layer2_overlay(y_layer2);
+
+
+					
+
+						if (tbblue_reveal_layer_layer2.v) {
+								tbblue_reveal_layer_draw(tbblue_layer_layer2);
+						}
+					}
+
+								
+				}
+
 		
 		//Capa de tiles. Mezclarla directamente a la capa de ula tbblue_layer_ula
 
@@ -5909,6 +6869,22 @@ void screen_tbblue_refresca_no_rainbow(void)
                 }
 }
 
+
+void tbblue_out_port_8189(z80_byte value)
+{
+	             //Puerto tipicamente 8189
+                         // the hardware will respond to all port addresses with bit 1 reset, bit 12 set and bits 13, 14 and 15 reset).
+                       
+				//printf ("TBBLUE changing port 8189 value=0x%02XH\n",value);
+                                puerto_8189=value;
+
+				//En rom entra la pagina habitual de modo 128k, evitando lo que diga la mmu
+				tbblue_registers[80]=255;
+				tbblue_registers[81]=255;
+
+                                tbblue_set_memory_pages();
+                        
+}
 
 void tbblue_out_port_32765(z80_byte value)
 {

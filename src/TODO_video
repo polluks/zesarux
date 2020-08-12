@@ -24,8 +24,6 @@ Opcion desactivar colores que solo va en realvideo off:
 -Quizá simplemente una paleta grayscale y cuando haga render final, que convierta valores rgb a gris
 
 
--opción nueva para curses, stout y simpletext para forzar render gráfico tipo tsconf
-
 -sdl2 peta con easter-egg en linux
 
 - Vídeo que muestre text to speech con aventura conversacional
@@ -77,9 +75,6 @@ upara lightgun la mayoria de puertos son teclado o kempston, en que ya se contro
 
 -Posibilidad de desactivar puntero raton para el resto de drivers: curses, 
 
--tab en curses en menu filesel no lo lee
-
--tecla delete en curses en menus no borra
 -Salida de texto en simpletext y otros drivers texto: carácter 127 no es imprimible
 
 
@@ -141,5 +136,28 @@ Ver http://www.atc.us.es/svn/zxuno/software/modo_radastan/videos_radastanianos/ 
 
 -una vez al pasar de stdout a sdl luego sdl no leia teclas
 
+-Impresión caracteres en consola texto nunca debe mostrar el 127. Es Delete
+Quizá mostrar C en caso de 127
+->Hecho de momento en chardetect y speech
+
 *************
+
+Por drivers:
+
+--curses--
+
+
+-En overscan con curses salen colores con ??? a la derecha fuera de pantalla 
+
+- curses: con ventana ay piano en background, al ir a Smartload se mezcla texto de ventana ay piano en Smartload
+
+
+
+- curses: en menú no aparece carácter “.” (Punto)
+
+
+
+--stdout--
+
+-stdout algunos menus que no van bien. Como display->view colour palette
 

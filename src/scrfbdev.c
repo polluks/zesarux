@@ -116,6 +116,10 @@ The scancodes in translated scancode set 2 are given in hex. Between parentheses
 #include "sam.h"
 #include "ql.h"
 #include "settings.h"
+#include "msx.h"
+#include "coleco.h"
+#include "sg1000.h"
+#include "svi.h"
 
 z80_byte *fbdev_pointer = 0;
   long int fbdev_screensize = 0;
@@ -219,7 +223,7 @@ void scrfbdev_z88_cpc_load_keymap(void)
 	//y los codigos raw de retorno siempre son los mismos.
 	//por tanto, devolvemos lo mismo que con keymap english siempre:
 
-	if (MACHINE_IS_Z88 || MACHINE_IS_SAM || MACHINE_IS_QL) {
+	if (MACHINE_IS_Z88 || MACHINE_IS_SAM || MACHINE_IS_QL || MACHINE_IS_MSX || MACHINE_IS_SVI) {
 		scrfbdev_keymap_z88_cpc_minus=RAWKEY_minus;
 		scrfbdev_keymap_z88_cpc_equal=RAWKEY_equal;
 		scrfbdev_keymap_z88_cpc_backslash=RAWKEY_grave;
@@ -319,7 +323,7 @@ void scrfbdev_putchar_zx8081(int x,int y, z80_byte caracter)
 
 
 //Rutina de putchar para menu
-void scrfbdev_putchar_menu(int x,int y, z80_byte caracter,z80_byte tinta,z80_byte papel)
+void scrfbdev_putchar_menu(int x,int y, z80_byte caracter,int tinta,int papel)
 {
 
 
@@ -338,7 +342,7 @@ void scrfbdev_putchar_menu(int x,int y, z80_byte caracter,z80_byte tinta,z80_byt
 
 }
 
-void scrfbdev_putchar_footer(int x,int y, z80_byte caracter,z80_byte tinta,z80_byte papel)
+void scrfbdev_putchar_footer(int x,int y, z80_byte caracter,int tinta,int papel)
 {
 
 	int yorigen;
@@ -459,8 +463,22 @@ void scrfbdev_refresca_pantalla(void)
                 scr_refresca_pantalla_y_border_mk14();
         }
 
+	else if (MACHINE_IS_MSX) {
+		scr_refresca_pantalla_y_border_msx();
+	}    
+
+	else if (MACHINE_IS_SVI) {
+		scr_refresca_pantalla_y_border_svi();
+	}    		
 
 
+	else if (MACHINE_IS_COLECO) {
+		scr_refresca_pantalla_y_border_coleco();
+	}    
+
+	else if (MACHINE_IS_SG1000) {
+		scr_refresca_pantalla_y_border_sg1000();
+	}    
 
 
         if (menu_overlay_activo) {
@@ -813,7 +831,7 @@ void scrfbdev_actualiza_tablas_teclado_rawmode(void){
 
 
         int tecla_gestionada_sam_ql=0;
-        if (MACHINE_IS_SAM || MACHINE_IS_QL) {
+        if (MACHINE_IS_SAM || MACHINE_IS_QL || MACHINE_IS_MSX || MACHINE_IS_SVI) {
                 tecla_gestionada_sam_ql=1;
 
                         if (teclaraw==scrfbdev_keymap_z88_cpc_minus) util_set_reset_key_common_keymap(UTIL_KEY_COMMON_KEYMAP_MINUS,pressrelease);

@@ -1059,7 +1059,7 @@ void codetests_https()
 	char redirect_url[NETWORK_MAX_URL];
 
 	int retorno=zsock_http("archive.org","/download/World_of_Spectrum_June_2017_Mirror/World%20of%20Spectrum%20June%202017%20Mirror.zip/World%20of%20Spectrum%20June%202017%20Mirror/sinclair/games/m/Mandroid.tzx.zip",
-				&http_code,&mem,&total_leidos,&mem_after_headers,0,"",1,redirect_url);
+				&http_code,&mem,&total_leidos,&mem_after_headers,0,"",1,redirect_url,0);
 
 	if (retorno<0) {
 		printf ("Error zsock_http\n");
@@ -1127,7 +1127,7 @@ void codetests_http()
 	char *mem_after_headers;
 	int total_leidos;
 	char redirect_url[NETWORK_MAX_URL];
-	int retorno=zsock_http("www.zx81.nl","/files.html",&http_code,&mem,&total_leidos,&mem_after_headers,0,"",0,redirect_url);
+	int retorno=zsock_http("www.zx81.nl","/files.html",&http_code,&mem,&total_leidos,&mem_after_headers,0,"",0,redirect_url,0);
 	orig_mem=mem;
 	
 	if (retorno==0 && mem!=NULL) printf ("Response\n%s\n",mem);
@@ -1173,7 +1173,7 @@ void codetests_http()
 	//peticion saltando cabeceras
 	printf ("Request skipping headers\n");
 
-	retorno=zsock_http("www.zx81.nl","/files.html",&http_code,&mem,&total_leidos,&mem_after_headers,1,"",0,redirect_url);
+	retorno=zsock_http("www.zx81.nl","/files.html",&http_code,&mem,&total_leidos,&mem_after_headers,1,"",0,redirect_url,0);
 	if (mem_after_headers!=NULL) printf ("Answer after headers:\n%s\n",mem_after_headers);
 	
 	if (mem!=NULL) free (mem);
@@ -1341,6 +1341,41 @@ void codetests_open_sockets_infinite(void)
 
 #endif
 
+
+/*
+void codetests_get_background_f_key(void)
+{
+
+  
+	int i;
+
+	for (i=1;i<=10;i++) {
+
+
+		z80_byte *puntero;
+		int mascara;
+
+		puntero=menu_get_port_puerto_especial(i);
+		mascara=menu_get_mask_puerto_especial(i);
+
+
+		printf ("puerto: %p mascara: %d\n",puntero,mascara);
+	}
+}
+*/
+
+void codetests_tbblue_set_ram_blocks(void)
+{
+
+	int i;
+
+	for (i=0;i<3000;i++) {
+		tbblue_set_ram_blocks(i);
+		printf ("ram: %04dKB blocks: %d\n",i,tbblue_extra_512kb_blocks);
+	}
+
+}
+
 void codetests_main(int main_argc,char *main_argv[])
 {
 
@@ -1417,6 +1452,28 @@ void codetests_main(int main_argc,char *main_argv[])
 
 	printf ("\nRunning get raster tbblue horizontal\n");
 	codetests_tbblue_get_horizontal_raster();
+
+
+	printf ("\nRunning code tests tbblue_set_ram_blocks\n");
+	codetests_tbblue_set_ram_blocks();
+
+
+	//printf ("\nRunning getting background F-key\n");
+	//codetests_get_background_f_key();
+
+
+	//prueba crear paleta
+	/*
+	int i;
+
+	int valor_paleta=0;
+
+	for (i=0;i<256;i++) {
+		printf ("%d %d %d Untitled\n",(valor_paleta>>16 & 0xFF),(valor_paleta>>8 & 0xFF),(valor_paleta  & 0xFF)) ;
+
+		valor_paleta +=0x010101;
+	}
+	*/
 
 	exit(0);
 }

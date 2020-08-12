@@ -8,6 +8,9 @@ http://www.simcoupe.org
 Copyright Philip Kendall and other authors. Distributed under GNU GENERAL PUBLIC LICENSE v2, you may read it on the LICENSE_fuse file
 http://fuse-emulator.sourceforge.net
 
+-Hilow
+Copyright 1985 Juan J. Arias, Carlos Galucci, Roberto Eimer, Ramiro Arias, Alfredo Mussio
+
 -mdvtool
 Copyright 2005 Till Harbaum. Distributed under GNU GENERAL PUBLIC LICENSE v3, you may read it on the LICENSE_mdvtool file
 https://github.com/mist-devel/mist-binaries/tree/master/cores/ql/tools/mdvtool
@@ -23,6 +26,10 @@ https://github.com/nihirash/esxdos-scl2trd
 -National Semiconductor SC/MP CPU Emulator
 Copyright 2017 Miodrag Milanovic. Distributed under BSD-3 License, you may read it on the LICENSE_SCMP_CORE
 https://github.com/mamedev/mame/tree/master/src/mame/drivers/mk14.cpp
+
+-Qemu Mac OS video driver
+Copyright Fabrice Bellard and the QEMU team. Distributed under the GNU General Public License version 2.
+https://github.com/aliguori/qemu
 
 -spg loader. Extracted from UnrealSpeccy emulator
 Copyright various authors. Distributed under freeware, you may read it on the LICENSE_unrealspeccy file
@@ -43,3 +50,4 @@ https://github.com/Utodev/unPAWs
 -zip
 Copyright Kuba Podgorski. Distributed under The Unlicense License, you may read it on the LICENSE_zip file
 https://github.com/kuba--/zip 
+

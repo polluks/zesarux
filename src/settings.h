@@ -50,6 +50,7 @@ extern int remote_protocol_port;
 extern z80_bit hardware_debug_port;
 
 extern char zesarux_zxi_hardware_debug_file[];
+extern z80_bit setting_mostrar_visualmem_grafico;
 
 
 extern z80_bit autosave_snapshot_on_exit;
@@ -67,6 +68,24 @@ extern int adventure_keyboard_key_length;
 extern int adventure_keyboard_send_final_spc;
 
 extern z80_bit use_scrcursesw;
+
+extern z80_bit tbblue_autoconfigure_sd_asked;
+
+extern int menu_allow_background_windows;
+
+extern z80_bit tbblue_store_scanlines;
+
+extern z80_bit tbblue_store_scanlines_border;
+
+extern z80_bit menu_reopen_background_windows_on_start;
+
+extern z80_bit vdp_9918a_unlimited_sprites_line;
+
+extern z80_bit msx_loading_stripes;
+
+extern z80_bit msx_loading_noise_reduction;
+
+extern z80_bit setting_machine_selection_by_name;
 
 #endif
 

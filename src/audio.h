@@ -60,6 +60,8 @@ extern int frecuencia_sonido_variable;
 #define AMPLITUD_TAPE 2
 
 extern int amplitud_speaker_actual_zx8081;
+extern int amplitud_speaker_actual_msx;
+extern int amplitud_speaker_actual_svi;
 
 extern int (*audio_init) (void);
 extern int (*audio_thread_finish) (void);
@@ -164,6 +166,12 @@ extern void mid_frame_event(void);
 extern int audio_midi_output_initialized;
 extern void audio_midi_output_frame_event(void);
 
+extern int audio_midi_raw_mode;
+
+extern int audio_midi_output_note_on(unsigned char channel, unsigned char note);
+extern void audio_midi_output_raw(z80_byte value);
+extern void audio_midi_output_reset(void);
+
 //Para cuantas notas da esto aprox?
 #define MAX_MID_EXPORT_BUFFER 1000000
 
@@ -240,6 +248,8 @@ extern audiodac_type audiodac_types[];
 
 extern z80_bit beeper_enabled;
 
+extern z80_bit audio_resample_1bit;
+
 extern void audiodac_mix(void);
 
 extern int audio_using_sdl2;
@@ -294,6 +304,10 @@ extern int audio_midi_client;
 extern int audio_midi_port;
 extern int audio_midi_available(void);
 
+extern char audio_raw_midi_device_out[];
+
+#define MAX_AUDIO_RAW_MIDI_DEVICE_OUT 128
+
 
 #ifdef MINGW
 
@@ -303,7 +317,8 @@ extern int windows_mid_initialize_all(void);
 extern void windows_mid_finish_all(void);
 extern int windows_note_on(unsigned char channel, unsigned char note,unsigned char velocity);
 extern int windows_note_off(unsigned char channel, unsigned char note,unsigned char velocity);
-
+extern void windows_midi_raw(z80_byte value);
+extern void windows_midi_output_reset(void);
 
 
 #endif
